@@ -1,0 +1,955 @@
+{% extends "base.html" %}
+
+{% block title %}Central de Ações - Dashboard Papello{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    
+    <!-- Header da Página -->
+    <div class="page-header">
+        <div class="container">
+            <div class="row align-items-center">
+                <div class="col-md-8">
+                    <h1><i class="fas fa-tasks me-3"></i>Central de Ações</h1>
+                    <p>Gerenciamento e execução de ações de Customer Success</p>
+                </div>
+                <div class="col-md-4 text-md-end">
+                    <div class="btn-group" role="group">
+                        <button class="btn btn-outline-light" onclick="exportActions('excel')">
+                            <i class="fas fa-file-excel me-2"></i>Excel
+                        </button>
+                        <button class="btn btn-outline-light" onclick="bulkExecute()">
+                            <i class="fas fa-check-double me-2"></i>Executar Lote
+                        </button>
+                        <button class="btn btn-outline-light" onclick="refreshData()">
+                            <i class="fas fa-sync-alt me-2"></i>Atualizar
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="container">
+        
+        <!-- Painel de Controle -->
+        <div class="section-header">
+            <i class="fas fa-tachometer-alt section-icon"></i>
+            <h2 class="section-title">Painel de Controle</h2>
+        </div>
+        
+        <div class="row mb-4">
+            <div class="col-lg-3 col-md-6 mb-3">
+                <div class="metric-card warning" id="card-acoes-pendentes-total">
+                    <i class="fas fa-hourglass-half metric-icon"></i>
+                    <div class="metric-title">Ações Pendentes</div>
+                    <div class="metric-value skeleton">---</div>
+                    <div class="metric-trend">Total na fila</div>
+                </div>
+            </div>
+            
+            <div class="col-lg-3 col-md-6 mb-3">
+                <div class="metric-card danger" id="card-alta-prioridade">
+                    <i class="fas fa-exclamation-triangle metric-icon"></i>
+                    <div class="metric-title">Alta Prioridade</div>
+                    <div class="metric-value skeleton">---</div>
+                    <div class="metric-trend">Requer ação imediata</div>
+                </div>
+            </div>
+            
+            <div class="col-lg-3 col-md-6 mb-3">
+                <div class="metric-card success" id="card-executadas-hoje">
+                    <i class="fas fa-check-circle metric-icon"></i>
+                    <div class="metric-title">Executadas Hoje</div>
+                    <div class="metric-value skeleton">---</div>
+                    <div class="metric-trend">Progresso diário</div>
+                </div>
+            </div>
+            
+            <div class="col-lg-3 col-md-6 mb-3">
+                <div class="metric-card info" id="card-eficiencia">
+                    <i class="fas fa-chart-line metric-icon"></i>
+                    <div class="metric-title">Eficiência</div>
+                    <div class="metric-value skeleton">---%</div>
+                    <div class="metric-trend">Meta diária</div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Filtros e Controles -->
+        <div class="filters-container">
+            <div class="filters-title">
+                <i class="fas fa-filter"></i>
+                Filtros e Controles
+            </div>
+            <div class="row">
+                <div class="col-lg-3 col-md-6 mb-3">
+                    <label for="filter-priority" class="form-label">🎯 Prioridade</label>
+                    <select class="form-select" id="filter-priority">
+                        <option value="">Todas as prioridades</option>
+                        <option value="alta">Alta (Score > 200)</option>
+                        <option value="media">Média (Score 100-200)</option>
+                        <option value="baixa">Baixa (Score < 100)</option>
+                    </select>
+                </div>
+                
+                <div class="col-lg-3 col-md-6 mb-3">
+                    <label for="filter-team" class="form-label">👥 Responsável</label>
+                    <select class="form-select" id="filter-team">
+                        <option value="">Todos os membros</option>
+                        <option value="maria">Maria (Gerente)</option>
+                        <option value="ana">Ana (SAC)</option>
+                        <option value="joao">João (SAC)</option>
+                        <option value="pedro">Pedro (SAC)</option>
+                    </select>
+                </div>
+                
+                <div class="col-lg-3 col-md-6 mb-3">
+                    <label for="filter-action-type" class="form-label">📋 Tipo de Ação</label>
+                    <select class="form-select" id="filter-action-type">
+                        <option value="">Todos os tipos</option>
+                        <option value="contato">Contato Direto</option>
+                        <option value="email">Email Follow-up</option>
+                        <option value="reuniao">Reunião</option>
+                        <option value="proposta">Proposta Comercial</option>
+                        <option value="suporte">Suporte Técnico</option>
+                    </select>
+                </div>
+                
+                <div class="col-lg-3 col-md-6 mb-3">
+                    <label for="filter-client-level" class="form-label">🏆 Nível Cliente</label>
+                    <select class="form-select" id="filter-client-level">
+                        <option value="">Todos os níveis</option>
+                        <option value="premium">Premium</option>
+                        <option value="gold">Gold</option>
+                        <option value="silver">Silver</option>
+                        <option value="bronze">Bronze</option>
+                    </select>
+                </div>
+            </div>
+            
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="filter-overdue">
+                        <label class="form-check-label" for="filter-overdue">
+                            🕐 Apenas ações em atraso
+                        </label>
+                    </div>
+                </div>
+                
+                <div class="col-md-6 mb-3">
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="filter-premium-only">
+                        <label class="form-check-label" for="filter-premium-only">
+                            👑 Apenas clientes Premium/Gold
+                        </label>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="text-center">
+                <button class="btn btn-papello btn-lg me-3" onclick="applyActionFilters()">
+                    <i class="fas fa-search me-2"></i>Aplicar Filtros
+                </button>
+                <button class="btn btn-outline-secondary btn-lg" onclick="clearActionFilters()">
+                    <i class="fas fa-times me-2"></i>Limpar
+                </button>
+            </div>
+        </div>
+        
+        <!-- Ações Prioritárias -->
+        <div class="section-header">
+            <i class="fas fa-fire section-icon"></i>
+            <h2 class="section-title">Ações Prioritárias</h2>
+        </div>
+        
+        <!-- Controles de Visualização -->
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <div>
+                <span class="text-muted">Mostrando <span id="showing-actions-range">1-10</span> de <span id="total-actions">0</span> ações</span>
+            </div>
+            <div class="btn-group" role="group" aria-label="Visualização">
+                <input type="radio" class="btn-check" name="view-mode" id="view-cards" autocomplete="off" checked>
+                <label class="btn btn-outline-papello btn-sm" for="view-cards">
+                    <i class="fas fa-th-large"></i> Cards
+                </label>
+                
+                <input type="radio" class="btn-check" name="view-mode" id="view-table" autocomplete="off">
+                <label class="btn btn-outline-papello btn-sm" for="view-table">
+                    <i class="fas fa-table"></i> Tabela
+                </label>
+            </div>
+        </div>
+        
+        <!-- Container das Ações -->
+        <div id="actions-container">
+            <div class="text-center py-5">
+                <div class="spinner-border text-success" role="status">
+                    <span class="visually-hidden">Carregando ações...</span>
+                </div>
+                <p class="mt-3 text-muted">Carregando lista de ações...</p>
+            </div>
+        </div>
+        
+        <!-- Paginação -->
+        <nav aria-label="Paginação de ações" id="actions-pagination-container">
+            <!-- Será preenchido dinamicamente -->
+        </nav>
+        
+        <!-- Histórico de Ações -->
+        <div class="section-header">
+            <i class="fas fa-history section-icon"></i>
+            <h2 class="section-title">Histórico Recente</h2>
+        </div>
+        
+        <div class="chart-card">
+            <div class="chart-title">
+                <i class="fas fa-chart-bar"></i>
+                Ações Executadas - Últimos 30 Dias
+                <button class="btn btn-sm btn-outline-papello ms-auto" onclick="exportHistory()">
+                    <i class="fas fa-download"></i> Exportar Histórico
+                </button>
+            </div>
+            <div id="actions-history-content">
+                <div class="text-center py-4">
+                    <div class="spinner-border text-success" role="status"></div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Estatísticas da Equipe -->
+        <div class="row mb-4 mt-4">
+            <div class="col-lg-6 mb-3">
+                <div class="chart-card">
+                    <div class="chart-title">
+                        <i class="fas fa-users"></i>
+                        Performance por Membro da Equipe
+                    </div>
+                    <canvas id="chart-team-performance"></canvas>
+                </div>
+            </div>
+            
+            <div class="col-lg-6 mb-3">
+                <div class="chart-card">
+                    <div class="chart-title">
+                        <i class="fas fa-clock"></i>
+                        Tempo de Execução por Tipo
+                    </div>
+                    <canvas id="chart-execution-time"></canvas>
+                </div>
+            </div>
+        </div>
+        
+    </div>
+    
+</div>
+
+<!-- Modal de Execução de Ação -->
+<div class="modal fade" id="executeActionModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-play me-2"></i>
+                    Executar Ação
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="action-execution-content">
+                    <!-- Será preenchido dinamicamente -->
+                </div>
+                
+                <div class="mb-3">
+                    <label for="execution-notes" class="form-label">📝 Notas da Execução</label>
+                    <textarea class="form-control" id="execution-notes" rows="3" 
+                              placeholder="Descreva o que foi feito, resultado, próximos passos..."></textarea>
+                </div>
+                
+                <div class="mb-3">
+                    <label for="execution-outcome" class="form-label">✅ Resultado</label>
+                    <select class="form-select" id="execution-outcome">
+                        <option value="sucesso">✅ Sucesso - Ação concluída</option>
+                        <option value="parcial">⚠️ Parcial - Requer follow-up</option>
+                        <option value="reagendar">📅 Reagendar - Cliente indisponível</option>
+                        <option value="escalar">🚨 Escalar - Requer intervenção</option>
+                    </select>
+                </div>
+                
+                <div class="mb-3">
+                    <label for="next-action" class="form-label">🎯 Próxima Ação (se necessário)</label>
+                    <input type="text" class="form-control" id="next-action" 
+                           placeholder="Ex: Agendar reunião, enviar proposta...">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-papello" id="btn-confirm-execution">
+                    <i class="fas fa-check me-2"></i>Confirmar Execução
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de Execução em Lote -->
+<div class="modal fade" id="bulkExecuteModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-check-double me-2"></i>
+                    Execução em Lote
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle me-2"></i>
+                    Selecione as ações que deseja executar em lote. Esta funcionalidade é útil para ações similares ou de rotina.
+                </div>
+                
+                <div id="bulk-actions-list">
+                    <!-- Lista de ações será carregada aqui -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-warning" id="btn-bulk-execute">
+                    <i class="fas fa-check-double me-2"></i>Executar Selecionadas
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block page_init %}
+loadActionsPage();
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+let actionsData = [];
+let filteredActions = [];
+let selectedActions = [];
+let currentActionsPage = 1;
+let actionsPerPage = 10;
+
+function loadActionsPage() {
+    console.log('📋 Carregando página de ações...');
+    
+    // Carregar dados das ações
+    loadActionsData();
+    
+    // Event listeners
+    setupActionEventListeners();
+}
+
+function setupActionEventListeners() {
+    // Filtros
+    $('#filter-priority, #filter-team, #filter-action-type, #filter-client-level').change(applyActionFilters);
+    $('#filter-overdue, #filter-premium-only').change(applyActionFilters);
+    
+    // Modo de visualização
+    $('input[name="view-mode"]').change(function() {
+        displayActions();
+    });
+    
+    // Paginação
+    $(document).on('click', '.page-link', function(e) {
+        e.preventDefault();
+        const page = $(this).data('page');
+        if (page) changeActionsPage(page);
+    });
+}
+
+function loadActionsData() {
+    // Simular dados de ações
+    actionsData = generateMockActions();
+    filteredActions = [...actionsData];
+    updateActionsStatistics();
+    displayActions();
+    loadActionsHistory();
+    createTeamPerformanceChart();
+    createExecutionTimeChart();
+    console.log(`✅ ${actionsData.length} ações carregadas`);
+}
+
+function generateMockActions() {
+    const actions = [];
+    const actionTypes = ['Contato Direto', 'Email Follow-up', 'Reunião', 'Proposta Comercial', 'Suporte Técnico'];
+    const clientLevels = ['Premium', 'Gold', 'Silver', 'Bronze'];
+    const priorities = ['alta', 'media', 'baixa'];
+    const teams = ['Maria', 'Ana', 'João', 'Pedro'];
+    
+    for (let i = 1; i <= 50; i++) {
+        const priority = priorities[Math.floor(Math.random() * priorities.length)];
+        const priorityScore = priority === 'alta' ? Math.random() * 100 + 200 :
+                             priority === 'media' ? Math.random() * 100 + 100 :
+                             Math.random() * 100;
+        
+        const createdDate = new Date();
+        createdDate.setDate(createdDate.getDate() - Math.floor(Math.random() * 30));
+        
+        actions.push({
+            id: i,
+            clientName: `Cliente ${i}`,
+            clientEmail: `cliente${i}@empresa.com`,
+            clientLevel: clientLevels[Math.floor(Math.random() * clientLevels.length)],
+            actionType: actionTypes[Math.floor(Math.random() * actionTypes.length)],
+            description: `Ação sugerida para cliente ${i} - ${actionTypes[Math.floor(Math.random() * actionTypes.length)]}`,
+            priority: priority,
+            priorityScore: priorityScore,
+            assignedTo: teams[Math.floor(Math.random() * teams.length)],
+            createdDate: createdDate,
+            dueDate: new Date(createdDate.getTime() + (Math.random() * 7 + 1) * 24 * 60 * 60 * 1000),
+            status: 'pendente',
+            isOverdue: Math.random() > 0.8
+        });
+    }
+    
+    return actions.sort((a, b) => b.priorityScore - a.priorityScore);
+}
+
+function applyActionFilters() {
+    const priorityFilter = $('#filter-priority').val();
+    const teamFilter = $('#filter-team').val();
+    const actionTypeFilter = $('#filter-action-type').val();
+    const clientLevelFilter = $('#filter-client-level').val();
+    const overdueOnly = $('#filter-overdue').is(':checked');
+    const premiumOnly = $('#filter-premium-only').is(':checked');
+    
+    filteredActions = actionsData.filter(action => {
+        if (priorityFilter && action.priority !== priorityFilter) return false;
+        if (teamFilter && action.assignedTo.toLowerCase() !== teamFilter) return false;
+        if (actionTypeFilter && !action.actionType.toLowerCase().includes(actionTypeFilter)) return false;
+        if (clientLevelFilter && action.clientLevel.toLowerCase() !== clientLevelFilter) return false;
+        if (overdueOnly && !action.isOverdue) return false;
+        if (premiumOnly && !['Premium', 'Gold'].includes(action.clientLevel)) return false;
+        
+        return true;
+    });
+    
+    currentActionsPage = 1;
+    updateActionsStatistics();
+    displayActions();
+    
+    showAlert(`Filtros aplicados: ${filteredActions.length} ações encontradas`, 'success');
+}
+
+function clearActionFilters() {
+    $('#filter-priority, #filter-team, #filter-action-type, #filter-client-level').val('');
+    $('#filter-overdue, #filter-premium-only').prop('checked', false);
+    
+    filteredActions = [...actionsData];
+    currentActionsPage = 1;
+    updateActionsStatistics();
+    displayActions();
+    
+    showAlert('Filtros removidos', 'info');
+}
+
+function updateActionsStatistics() {
+    const totalActions = filteredActions.length;
+    const highPriority = filteredActions.filter(a => a.priority === 'alta').length;
+    const executedToday = Math.floor(Math.random() * 15) + 5; // Simulado
+    const efficiency = totalActions > 0 ? (executedToday / totalActions * 100) : 0;
+    
+    updateMetricCard('card-acoes-pendentes-total', {
+        value: totalActions.toString(),
+        trend: 'Total na fila',
+        colorClass: totalActions > 50 ? 'danger' : totalActions > 25 ? 'warning' : 'info'
+    });
+    
+    updateMetricCard('card-alta-prioridade', {
+        value: highPriority.toString(),
+        trend: 'Requer ação imediata',
+        colorClass: highPriority > 0 ? 'danger' : 'success'
+    });
+    
+    updateMetricCard('card-executadas-hoje', {
+        value: executedToday.toString(),
+        trend: 'Progresso diário',
+        colorClass: 'success'
+    });
+    
+    updateMetricCard('card-eficiencia', {
+        value: `${efficiency.toFixed(1)}%`,
+        trend: 'Meta diária',
+        colorClass: efficiency >= 20 ? 'success' : 'warning'
+    });
+}
+
+function displayActions() {
+    const viewMode = $('input[name="view-mode"]:checked').attr('id');
+    const start = (currentActionsPage - 1) * actionsPerPage;
+    const end = start + actionsPerPage;
+    const actionsToShow = filteredActions.slice(start, end);
+    
+    let html = '';
+    
+    if (actionsToShow.length === 0) {
+        html = `
+            <div class="text-center py-5">
+                <i class="fas fa-tasks fa-3x text-muted mb-3"></i>
+                <h5>Nenhuma ação encontrada</h5>
+                <p class="text-muted">Ajuste os filtros para ver mais ações.</p>
+            </div>
+        `;
+    } else if (viewMode === 'view-cards') {
+        html = generateActionCards(actionsToShow);
+    } else {
+        html = generateActionTable(actionsToShow);
+    }
+    
+    $('#actions-container').html(html);
+    updateActionsPagination();
+    updateActionsShowingRange();
+}
+
+function generateActionCards(actions) {
+    let html = '<div class="row">';
+    
+    actions.forEach(action => {
+        const priorityClass = getPriorityClass(action.priority);
+        const priorityIcon = getPriorityIcon(action.priority);
+        const overdueClass = action.isOverdue ? 'border-danger' : '';
+        const dueDateColor = action.isOverdue ? 'text-danger' : 'text-muted';
+        
+        html += `
+            <div class="col-lg-6 col-xl-4 mb-3">
+                <div class="card ${overdueClass} hover-lift h-100">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-start mb-3">
+                            <div class="priority-indicator ${priorityClass}">
+                                ${priorityIcon}
+                            </div>
+                            <div class="text-end">
+                                <small class="${dueDateColor}">
+                                    <i class="fas fa-clock me-1"></i>
+                                    ${formatDate(action.dueDate)}
+                                </small>
+                            </div>
+                        </div>
+                        
+                        <h6 class="card-title mb-2">${action.clientName}</h6>
+                        <p class="text-muted small mb-2">${action.clientEmail}</p>
+                        
+                        <div class="mb-3">
+                            <span class="badge nivel-${action.clientLevel.toLowerCase()} me-2">
+                                ${action.clientLevel}
+                            </span>
+                            <span class="badge bg-secondary">
+                                ${action.actionType}
+                            </span>
+                        </div>
+                        
+                        <p class="card-text small mb-3">${action.description}</p>
+                        
+                        <div class="d-flex justify-content-between align-items-center">
+                            <small class="text-muted">
+                                <i class="fas fa-user me-1"></i>${action.assignedTo}
+                            </small>
+                            <div>
+                                <button class="btn btn-outline-papello btn-sm me-1" 
+                                        onclick="viewActionDetails(${action.id})" title="Ver detalhes">
+                                    <i class="fas fa-eye"></i>
+                                </button>
+                                <button class="btn btn-papello btn-sm" 
+                                        onclick="executeAction(${action.id})" title="Executar">
+                                    <i class="fas fa-play"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+    
+    html += '</div>';
+    return html;
+}
+
+function generateActionTable(actions) {
+    let html = `
+        <div class="table-responsive">
+            <table class="table table-papello">
+                <thead>
+                    <tr>
+                        <th>
+                            <input type="checkbox" id="select-all-actions" onchange="toggleAllActions()">
+                        </th>
+                        <th>Prioridade</th>
+                        <th>Cliente</th>
+                        <th>Tipo</th>
+                        <th>Responsável</th>
+                        <th>Vencimento</th>
+                        <th>Ações</th>
+                    </tr>
+                </thead>
+                <tbody>
+    `;
+    
+    actions.forEach(action => {
+        const priorityClass = getPriorityClass(action.priority);
+        const priorityIcon = getPriorityIcon(action.priority);
+        const overdueClass = action.isOverdue ? 'text-danger fw-bold' : '';
+        
+        html += `
+            <tr>
+                <td>
+                    <input type="checkbox" class="action-checkbox" value="${action.id}">
+                </td>
+                <td>
+                    <span class="priority-indicator ${priorityClass}">
+                        ${priorityIcon}
+                    </span>
+                </td>
+                <td>
+                    <div>
+                        <strong>${action.clientName}</strong>
+                        <br><small class="text-muted">${action.clientEmail}</small>
+                        <br><span class="badge nivel-${action.clientLevel.toLowerCase()}">${action.clientLevel}</span>
+                    </div>
+                </td>
+                <td>${action.actionType}</td>
+                <td>${action.assignedTo}</td>
+                <td class="${overdueClass}">
+                    <i class="fas fa-clock me-1"></i>
+                    ${formatDate(action.dueDate)}
+                    ${action.isOverdue ? '<br><small class="badge bg-danger">ATRASADO</small>' : ''}
+                </td>
+                <td>
+                    <button class="btn btn-outline-papello btn-sm me-1" 
+                            onclick="viewActionDetails(${action.id})" title="Ver detalhes">
+                        <i class="fas fa-eye"></i>
+                    </button>
+                    <button class="btn btn-papello btn-sm" 
+                            onclick="executeAction(${action.id})" title="Executar">
+                        <i class="fas fa-play"></i>
+                    </button>
+                </td>
+            </tr>
+        `;
+    });
+    
+    html += `
+                </tbody>
+            </table>
+        </div>
+    `;
+    
+    return html;
+}
+
+function executeAction(actionId) {
+    const action = actionsData.find(a => a.id === actionId);
+    if (!action) return;
+    
+    // Preencher modal
+    const modalContent = `
+        <div class="row">
+            <div class="col-md-6">
+                <h6 class="mb-3">👤 Informações do Cliente</h6>
+                <p><strong>Nome:</strong> ${action.clientName}</p>
+                <p><strong>Email:</strong> ${action.clientEmail}</p>
+                <p><strong>Nível:</strong> <span class="badge nivel-${action.clientLevel.toLowerCase()}">${action.clientLevel}</span></p>
+            </div>
+            <div class="col-md-6">
+                <h6 class="mb-3">📋 Detalhes da Ação</h6>
+                <p><strong>Tipo:</strong> ${action.actionType}</p>
+                <p><strong>Prioridade:</strong> ${action.priority.toUpperCase()}</p>
+                <p><strong>Vencimento:</strong> ${formatDate(action.dueDate)}</p>
+            </div>
+        </div>
+        <div class="row">
+            <div class="col-12">
+                <h6 class="mb-3">🎯 Descrição</h6>
+                <div class="alert alert-info">${action.description}</div>
+            </div>
+        </div>
+    `;
+    
+    $('#action-execution-content').html(modalContent);
+    $('#execution-notes').val('');
+    $('#execution-outcome').val('sucesso');
+    $('#next-action').val('');
+    
+    $('#btn-confirm-execution').off('click').on('click', function() {
+        confirmActionExecution(actionId);
+    });
+    
+    $('#executeActionModal').modal('show');
+}
+
+function confirmActionExecution(actionId) {
+    const notes = $('#execution-notes').val();
+    const outcome = $('#execution-outcome').val();
+    const nextAction = $('#next-action').val();
+    
+    if (!notes.trim()) {
+        showAlert('Por favor, adicione notas sobre a execução', 'warning');
+        return;
+    }
+    
+    // Simular execução
+    const action = actionsData.find(a => a.id === actionId);
+    if (action) {
+        action.status = 'executada';
+        action.executedDate = new Date();
+        action.notes = notes;
+        action.outcome = outcome;
+        
+        // Remove da lista de ações pendentes
+        filteredActions = filteredActions.filter(a => a.id !== actionId);
+        actionsData = actionsData.filter(a => a.id !== actionId);
+        
+        updateActionsStatistics();
+        displayActions();
+        
+        showAlert(`Ação executada com sucesso para ${action.clientName}!`, 'success');
+        $('#executeActionModal').modal('hide');
+    }
+}
+
+function bulkExecute() {
+    // Gerar lista de ações para execução em lote
+    const bulkHtml = generateBulkActionsList();
+    $('#bulk-actions-list').html(bulkHtml);
+    $('#bulkExecuteModal').modal('show');
+}
+
+function generateBulkActionsList() {
+    const highPriorityActions = filteredActions.filter(a => a.priority === 'alta').slice(0, 10);
+    
+    if (highPriorityActions.length === 0) {
+        return '<div class="text-center py-4"><p class="text-muted">Nenhuma ação de alta prioridade disponível</p></div>';
+    }
+    
+    let html = '';
+    highPriorityActions.forEach(action => {
+        html += `
+            <div class="form-check mb-2">
+                <input class="form-check-input bulk-action-check" type="checkbox" value="${action.id}" id="bulk-${action.id}">
+                <label class="form-check-label w-100" for="bulk-${action.id}">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <strong>${action.clientName}</strong> - ${action.actionType}
+                            <br><small class="text-muted">${action.description}</small>
+                        </div>
+                        <span class="badge nivel-${action.clientLevel.toLowerCase()}">${action.clientLevel}</span>
+                    </div>
+                </label>
+            </div>
+        `;
+    });
+    
+    return html;
+}
+
+function loadActionsHistory() {
+    // Simular histórico das últimas 10 ações
+    const historyHtml = `
+        <div class="timeline">
+            <div class="timeline-item">
+                <div class="timeline-marker bg-success"></div>
+                <div class="timeline-content">
+                    <h6>Contato direto realizado</h6>
+                    <p class="text-muted mb-1">Cliente Premium XYZ - Maria</p>
+                    <small class="text-muted">Há 2 horas</small>
+                </div>
+            </div>
+            <div class="timeline-item">
+                <div class="timeline-marker bg-info"></div>
+                <div class="timeline-content">
+                    <h6>Email de follow-up enviado</h6>
+                    <p class="text-muted mb-1">Cliente Gold ABC - João</p>
+                    <small class="text-muted">Há 4 horas</small>
+                </div>
+            </div>
+            <div class="timeline-item">
+                <div class="timeline-marker bg-warning"></div>
+                <div class="timeline-content">
+                    <h6>Reunião agendada</h6>
+                    <p class="text-muted mb-1">Cliente Silver DEF - Ana</p>
+                    <small class="text-muted">Há 6 horas</small>
+                </div>
+            </div>
+        </div>
+        
+        <style>
+        .timeline {
+            position: relative;
+            padding-left: 30px;
+        }
+        .timeline::before {
+            content: '';
+            position: absolute;
+            left: 15px;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            background: #e5e7eb;
+        }
+        .timeline-item {
+            position: relative;
+            margin-bottom: 20px;
+        }
+        .timeline-marker {
+            position: absolute;
+            left: -23px;
+            top: 5px;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            border: 2px solid white;
+            box-shadow: 0 0 0 2px #e5e7eb;
+        }
+        .timeline-content {
+            background: #f8fafc;
+            padding: 15px;
+            border-radius: 8px;
+        }
+        </style>
+    `;
+    
+    $('#actions-history-content').html(historyHtml);
+}
+
+function createTeamPerformanceChart() {
+    const ctx = document.getElementById('chart-team-performance');
+    if (!ctx) return;
+    
+    new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: ['Maria', 'Ana', 'João', 'Pedro'],
+            datasets: [{
+                label: 'Ações Executadas',
+                data: [35, 28, 31, 22],
+                backgroundColor: CHART_COLORS.primary,
+                borderRadius: 8
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: {
+                x: { grid: { display: false } },
+                y: { beginAtZero: true, grid: { color: 'rgba(0,0,0,0.05)' } }
+            }
+        }
+    });
+}
+
+function createExecutionTimeChart() {
+    const ctx = document.getElementById('chart-execution-time');
+    if (!ctx) return;
+    
+    new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: ['Contato Direto', 'Email', 'Reunião', 'Proposta', 'Suporte'],
+            datasets: [{
+                data: [2.5, 1.2, 4.8, 6.2, 3.1],
+                backgroundColor: [
+                    CHART_COLORS.primary,
+                    CHART_COLORS.info,
+                    CHART_COLORS.warning,
+                    CHART_COLORS.success,
+                    CHART_COLORS.danger
+                ]
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: { padding: 15, usePointStyle: true, font: { size: 10 } }
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            return context.label + ': ' + context.parsed + 'h';
+                        }
+                    }
+                }
+            },
+            cutout: '60%'
+        }
+    });
+}
+
+// Funções auxiliares
+function getPriorityClass(priority) {
+    switch (priority) {
+        case 'alta': return 'text-danger';
+        case 'media': return 'text-warning';
+        case 'baixa': return 'text-success';
+        default: return 'text-muted';
+    }
+}
+
+function getPriorityIcon(priority) {
+    switch (priority) {
+        case 'alta': return '<i class="fas fa-exclamation-triangle"></i>';
+        case 'media': return '<i class="fas fa-exclamation-circle"></i>';
+        case 'baixa': return '<i class="fas fa-info-circle"></i>';
+        default: return '<i class="fas fa-circle"></i>';
+    }
+}
+
+function formatDate(date) {
+    return new Date(date).toLocaleDateString('pt-BR');
+}
+
+function updateActionsPagination() {
+    const totalPages = Math.ceil(filteredActions.length / actionsPerPage);
+    // Implementar paginação similar às outras páginas
+    // (código de paginação omitido para brevidade)
+}
+
+function updateActionsShowingRange() {
+    const start = (currentActionsPage - 1) * actionsPerPage + 1;
+    const end = Math.min(currentActionsPage * actionsPerPage, filteredActions.length);
+    
+    $('#showing-actions-range').text(`${start}-${end}`);
+    $('#total-actions').text(filteredActions.length);
+}
+
+function changeActionsPage(page) {
+    const totalPages = Math.ceil(filteredActions.length / actionsPerPage);
+    if (page >= 1 && page <= totalPages) {
+        currentActionsPage = page;
+        displayActions();
+    }
+}
+
+function exportActions(format) {
+    showAlert(`Exportando ${filteredActions.length} ações em ${format.toUpperCase()}...`, 'info');
+}
+
+function exportHistory() {
+    showAlert('Exportando histórico de ações...', 'info');
+}
+
+function toggleAllActions() {
+    const isChecked = $('#select-all-actions').is(':checked');
+    $('.action-checkbox').prop('checked', isChecked);
+}
+
+function viewActionDetails(actionId) {
+    const action = actionsData.find(a => a.id === actionId);
+    if (action) {
+        // Implementar visualização de detalhes
+        showAlert(`Visualizando detalhes da ação para ${action.clientName}`, 'info');
+    }
+}
+</script>
+{% endblock %}

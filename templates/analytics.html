@@ -1,0 +1,1019 @@
+{% extends "base.html" %}
+
+{% block title %}Analytics & Performance - Dashboard Papello{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    
+    <!-- Header da Página -->
+    <div class="page-header">
+        <div class="container">
+            <div class="row align-items-center">
+                <div class="col-md-8">
+                    <h1><i class="fas fa-chart-bar me-3"></i>Analytics & Performance</h1>
+                    <p>Análises avançadas e métricas de performance do Customer Success</p>
+                </div>
+                <div class="col-md-4 text-md-end">
+                    <div class="btn-group" role="group">
+                        <button class="btn btn-outline-light" onclick="exportReport('pdf')">
+                            <i class="fas fa-file-pdf me-2"></i>PDF
+                        </button>
+                        <button class="btn btn-outline-light" onclick="exportReport('excel')">
+                            <i class="fas fa-file-excel me-2"></i>Excel
+                        </button>
+                        <button class="btn btn-outline-light" onclick="refreshData()">
+                            <i class="fas fa-sync-alt me-2"></i>Atualizar
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="container">
+        
+        <!-- Configurações de Período -->
+        <div class="filters-container">
+            <div class="filters-title">
+                <i class="fas fa-calendar-alt"></i>
+                Configurações de Análise
+            </div>
+            <div class="row align-items-end">
+                <div class="col-md-3">
+                    <label for="analytics-period" class="form-label">📅 Período de Análise</label>
+                    <select class="form-select" id="analytics-period">
+                        <option value="30">Últimos 30 dias</option>
+                        <option value="90" selected>Últimos 3 meses</option>
+                        <option value="180">Últimos 6 meses</option>
+                        <option value="365">Último ano</option>
+                    </select>
+                </div>
+                
+                <div class="col-md-3">
+                    <label for="analytics-comparison" class="form-label">📊 Comparação</label>
+                    <select class="form-select" id="analytics-comparison">
+                        <option value="previous">Período anterior</option>
+                        <option value="year">Mesmo período ano passado</option>
+                        <option value="none">Sem comparação</option>
+                    </select>
+                </div>
+                
+                <div class="col-md-3">
+                    <label for="analytics-segment" class="form-label">🎯 Segmento</label>
+                    <select class="form-select" id="analytics-segment">
+                        <option value="all">Todos os clientes</option>
+                        <option value="premium">Premium/Gold</option>
+                        <option value="high-value">Alto valor</option>
+                        <option value="at-risk">Em risco</option>
+                    </select>
+                </div>
+                
+                <div class="col-md-3">
+                    <button class="btn btn-papello w-100" onclick="updateAnalytics()">
+                        <i class="fas fa-chart-line me-2"></i>Analisar
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Métricas de Performance da Equipe -->
+        <div class="section-header">
+            <i class="fas fa-users-cog section-icon"></i>
+            <h2 class="section-title">Performance da Equipe CS</h2>
+        </div>
+        
+        <div class="row mb-4">
+            <div class="col-lg-3 col-md-6 mb-3">
+                <div class="metric-card info" id="card-acoes-executadas">
+                    <i class="fas fa-check-circle metric-icon"></i>
+                    <div class="metric-title">Ações Executadas</div>
+                    <div class="metric-value skeleton">---</div>
+                    <div class="metric-trend">Carregando...</div>
+                </div>
+            </div>
+            
+            <div class="col-lg-3 col-md-6 mb-3">
+                <div class="metric-card warning" id="card-acoes-pendentes-analytics">
+                    <i class="fas fa-hourglass-half metric-icon"></i>
+                    <div class="metric-title">Ações Pendentes</div>
+                    <div class="metric-value skeleton">---</div>
+                    <div class="metric-trend">Carregando...</div>
+                </div>
+            </div>
+            
+            <div class="col-lg-3 col-md-6 mb-3">
+                <div class="metric-card success" id="card-taxa-execucao">
+                    <i class="fas fa-percentage metric-icon"></i>
+                    <div class="metric-title">Taxa de Execução</div>
+                    <div class="metric-value skeleton">---%</div>
+                    <div class="metric-trend">Carregando...</div>
+                </div>
+            </div>
+            
+            <div class="col-lg-3 col-md-6 mb-3">
+                <div class="metric-card info" id="card-tempo-resposta">
+                    <i class="fas fa-clock metric-icon"></i>
+                    <div class="metric-title">Tempo Médio</div>
+                    <div class="metric-value skeleton">---h</div>
+                    <div class="metric-trend">Carregando...</div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Gráficos de Tendências -->
+        <div class="row mb-4">
+            <div class="col-lg-8 mb-3">
+                <div class="chart-card">
+                    <div class="chart-title">
+                        <i class="fas fa-chart-line"></i>
+                        Evolução das Ações de CS
+                    </div>
+                    <canvas id="chart-actions-trend"></canvas>
+                </div>
+            </div>
+            
+            <div class="col-lg-4 mb-3">
+                <div class="chart-card">
+                    <div class="chart-title">
+                        <i class="fas fa-chart-pie"></i>
+                        Tipos de Ações
+                    </div>
+                    <canvas id="chart-action-types"></canvas>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Análise Financeira -->
+        <div class="section-header">
+            <i class="fas fa-dollar-sign section-icon"></i>
+            <h2 class="section-title">Análise Financeira</h2>
+        </div>
+        
+        <div class="row mb-4">
+            <div class="col-lg-6 mb-3">
+                <div class="chart-card">
+                    <div class="chart-title">
+                        <i class="fas fa-chart-bar"></i>
+                        Receita por Nível de Cliente
+                    </div>
+                    <canvas id="chart-receita-nivel"></canvas>
+                </div>
+            </div>
+            
+            <div class="col-lg-6 mb-3">
+                <div class="chart-card" style="background: linear-gradient(135deg, #fef2f2 0%, #fff 100%);">
+                    <div class="chart-title">
+                        <i class="fas fa-exclamation-triangle text-danger"></i>
+                        Receita em Risco
+                        <span class="badge bg-danger ms-2" id="risco-percentage">0%</span>
+                    </div>
+                    <div class="p-4">
+                        <div class="row text-center">
+                            <div class="col-6">
+                                <div class="h2 text-danger" id="receita-risco-value">R$ 0</div>
+                                <small class="text-muted">Em Risco</small>
+                            </div>
+                            <div class="col-6">
+                                <div class="h2 text-success" id="receita-segura-value">R$ 0</div>
+                                <small class="text-muted">Segura</small>
+                            </div>
+                        </div>
+                        <div class="progress-papello mt-3">
+                            <div class="progress-bar bg-danger" role="progressbar" 
+                                 style="width: 0%" id="risco-progress"></div>
+                        </div>
+                        <div class="progress-label">
+                            <span>Distribuição de Risco Financeiro</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Análise de Churn -->
+        <div class="section-header">
+            <i class="fas fa-user-times section-icon"></i>
+            <h2 class="section-title">Análise de Churn</h2>
+        </div>
+        
+        <div class="row mb-4">
+            <div class="col-lg-4 col-md-6 mb-3">
+                <div class="metric-card success" id="card-retencao-rate">
+                    <i class="fas fa-heart metric-icon"></i>
+                    <div class="metric-title">Taxa de Retenção</div>
+                    <div class="metric-value skeleton">---%</div>
+                    <div class="metric-trend">Carregando...</div>
+                </div>
+            </div>
+            
+            <div class="col-lg-4 col-md-6 mb-3">
+                <div class="metric-card warning" id="card-churn-risk">
+                    <i class="fas fa-exclamation-triangle metric-icon"></i>
+                    <div class="metric-title">Clientes em Risco</div>
+                    <div class="metric-value skeleton">---</div>
+                    <div class="metric-trend">Carregando...</div>
+                </div>
+            </div>
+            
+            <div class="col-lg-4 col-md-6 mb-3">
+                <div class="metric-card danger" id="card-churn-prediction">
+                    <i class="fas fa-crystal-ball metric-icon"></i>
+                    <div class="metric-title">Predição Churn</div>
+                    <div class="metric-value skeleton">---%</div>
+                    <div class="metric-trend">Carregando...</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="row mb-4">
+            <div class="col-lg-8 mb-3">
+                <div class="chart-card">
+                    <div class="chart-title">
+                        <i class="fas fa-chart-area"></i>
+                        Evolução do Status dos Clientes
+                    </div>
+                    <canvas id="chart-churn-evolution"></canvas>
+                </div>
+            </div>
+            
+            <div class="col-lg-4 mb-3">
+                <div class="chart-card">
+                    <div class="chart-title">
+                        <i class="fas fa-thermometer-half"></i>
+                        Heatmap de Risco por Segmento
+                    </div>
+                    <div class="p-3" id="risk-heatmap">
+                        <div class="text-center py-4">
+                            <div class="spinner-border text-success" role="status"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Métricas de Satisfação Avançadas -->
+        <div class="section-header">
+            <i class="fas fa-smile-beam section-icon"></i>
+            <h2 class="section-title">Análise de Satisfação</h2>
+        </div>
+        
+        <div class="row mb-4">
+            <div class="col-lg-8 mb-3">
+                <div class="chart-card">
+                    <div class="chart-title">
+                        <i class="fas fa-chart-line"></i>
+                        Evolução das Métricas de Satisfação
+                    </div>
+                    <canvas id="chart-satisfaction-evolution"></canvas>
+                </div>
+            </div>
+            
+            <div class="col-lg-4 mb-3">
+                <div class="chart-card">
+                    <div class="chart-title">
+                        <i class="fas fa-star"></i>
+                        NPS por Segmento
+                    </div>
+                    <canvas id="chart-nps-segments"></canvas>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Insights e Recomendações -->
+        <div class="section-header">
+            <i class="fas fa-lightbulb section-icon"></i>
+            <h2 class="section-title">Insights e Recomendações</h2>
+        </div>
+        
+        <div class="row mb-4">
+            <div class="col-lg-6 mb-3">
+                <div class="chart-card" style="background: linear-gradient(135deg, #f0fdf4 0%, #fff 100%);">
+                    <div class="chart-title">
+                        <i class="fas fa-trophy text-success"></i>
+                        Oportunidades de Crescimento
+                    </div>
+                    <div class="p-3" id="growth-opportunities">
+                        <div class="text-center py-4">
+                            <div class="spinner-border text-success" role="status"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-lg-6 mb-3">
+                <div class="chart-card" style="background: linear-gradient(135deg, #fffbeb 0%, #fff 100%);">
+                    <div class="chart-title">
+                        <i class="fas fa-exclamation-triangle text-warning"></i>
+                        Alertas Críticos
+                    </div>
+                    <div class="p-3" id="critical-alerts">
+                        <div class="text-center py-4">
+                            <div class="spinner-border text-warning" role="status"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Relatório Executivo -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="chart-card">
+                    <div class="chart-title">
+                        <i class="fas fa-file-chart"></i>
+                        Relatório Executivo Automatizado
+                        <button class="btn btn-sm btn-outline-papello ms-auto" onclick="generateExecutiveReport()">
+                            <i class="fas fa-download me-1"></i>Gerar Relatório
+                        </button>
+                    </div>
+                    <div class="p-4" id="executive-report-content">
+                        <div class="text-center py-4">
+                            <div class="spinner-border text-success" role="status"></div>
+                            <p class="mt-3 text-muted">Gerando relatório executivo...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+    </div>
+    
+</div>
+{% endblock %}
+
+{% block page_init %}
+loadAnalyticsPage();
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+let analyticsData = {};
+let analyticsCharts = {};
+
+function loadAnalyticsPage() {
+    console.log('📊 Carregando página de analytics...');
+    
+    // Carregar dados iniciais
+    loadAnalyticsData();
+    
+    // Event listeners
+    $('#analytics-period, #analytics-comparison, #analytics-segment').change(function() {
+        updateAnalytics();
+    });
+}
+
+function loadAnalyticsData() {
+    const period = $('#analytics-period').val();
+    const comparison = $('#analytics-comparison').val();
+    const segment = $('#analytics-segment').val();
+    
+    $.ajax({
+        url: '/api/analytics-data',
+        method: 'GET',
+        data: { period, comparison, segment },
+        success: function(data) {
+            analyticsData = data;
+            updateAnalyticsMetrics();
+            createAnalyticsCharts();
+            generateInsights();
+            generateExecutiveReportContent();
+            console.log('✅ Dados de analytics carregados');
+        },
+        error: function() {
+            showAlert('Erro ao carregar dados de analytics', 'danger');
+        }
+    });
+}
+
+function updateAnalytics() {
+    showLoading();
+    loadAnalyticsData();
+    hideLoading();
+}
+
+function updateAnalyticsMetrics() {
+    // Performance da Equipe
+    updateMetricCard('card-acoes-executadas', {
+        value: '127',
+        trend: 'Últimos 30 dias',
+        colorClass: 'info'
+    });
+    
+    updateMetricCard('card-acoes-pendentes-analytics', {
+        value: '43',
+        trend: 'Requer atenção',
+        colorClass: 'warning'
+    });
+    
+    updateMetricCard('card-taxa-execucao', {
+        value: '74.7%',
+        trend: 'Meta: 80%+',
+        colorClass: 'warning'
+    });
+    
+    updateMetricCard('card-tempo-resposta', {
+        value: '4.2h',
+        trend: 'Tempo médio',
+        colorClass: 'success'
+    });
+    
+    // Métricas de Churn
+    updateMetricCard('card-retencao-rate', {
+        value: '78.3%',
+        trend: '↗️ +2.1% vs mês anterior',
+        colorClass: 'success'
+    });
+    
+    updateMetricCard('card-churn-risk', {
+        value: '156',
+        trend: 'Clientes em risco médio/alto',
+        colorClass: 'warning'
+    });
+    
+    updateMetricCard('card-churn-prediction', {
+        value: '12.4%',
+        trend: 'Predição próximos 30 dias',
+        colorClass: 'danger'
+    });
+    
+    // Receita em Risco
+    updateRiskAnalysis();
+}
+
+function updateRiskAnalysis() {
+    const receitaTotal = 2850000; // Simulado
+    const receitaRisco = 456000; // Simulado
+    const receitaSegura = receitaTotal - receitaRisco;
+    const percentualRisco = (receitaRisco / receitaTotal * 100);
+    
+    $('#receita-risco-value').text(`R$ ${formatNumber(receitaRisco/1000)}K`);
+    $('#receita-segura-value').text(`R$ ${formatNumber(receitaSegura/1000)}K`);
+    $('#risco-percentage').text(`${percentualRisco.toFixed(1)}%`);
+    $('#risco-progress').css('width', `${percentualRisco}%`);
+    
+    // Cor baseada no risco
+    const progressBar = $('#risco-progress');
+    if (percentualRisco > 20) {
+        progressBar.removeClass().addClass('progress-bar bg-danger');
+    } else if (percentualRisco > 10) {
+        progressBar.removeClass().addClass('progress-bar bg-warning');
+    } else {
+        progressBar.removeClass().addClass('progress-bar bg-success');
+    }
+}
+
+function createAnalyticsCharts() {
+    createActionsTrendChart();
+    createActionTypesChart();
+    createReceitaNivelChart();
+    createChurnEvolutionChart();
+    createSatisfactionEvolutionChart();
+    createNPSSegmentsChart();
+}
+
+function createActionsTrendChart() {
+    const ctx = document.getElementById('chart-actions-trend');
+    if (!ctx) return;
+    
+    if (analyticsCharts.actionsTrend) {
+        analyticsCharts.actionsTrend.destroy();
+    }
+    
+    // Dados simulados para os últimos 30 dias
+    const labels = [];
+    const executedData = [];
+    const pendingData = [];
+    
+    for (let i = 29; i >= 0; i--) {
+        const date = new Date();
+        date.setDate(date.getDate() - i);
+        labels.push(date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }));
+        executedData.push(Math.floor(Math.random() * 15) + 5);
+        pendingData.push(Math.floor(Math.random() * 10) + 2);
+    }
+    
+    analyticsCharts.actionsTrend = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: 'Ações Executadas',
+                    data: executedData,
+                    borderColor: CHART_COLORS.success,
+                    backgroundColor: CHART_COLORS.success + '20',
+                    fill: true,
+                    tension: 0.3
+                },
+                {
+                    label: 'Ações Pendentes',
+                    data: pendingData,
+                    borderColor: CHART_COLORS.warning,
+                    backgroundColor: CHART_COLORS.warning + '20',
+                    fill: true,
+                    tension: 0.3
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'top',
+                    labels: {
+                        usePointStyle: true,
+                        padding: 20
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    grid: { display: false },
+                    ticks: { maxTicksLimit: 10 }
+                },
+                y: {
+                    beginAtZero: true,
+                    grid: { color: 'rgba(0,0,0,0.05)' }
+                }
+            },
+            interaction: {
+                intersect: false,
+                mode: 'index'
+            }
+        }
+    });
+}
+
+function createActionTypesChart() {
+    const ctx = document.getElementById('chart-action-types');
+    if (!ctx) return;
+    
+    if (analyticsCharts.actionTypes) {
+        analyticsCharts.actionTypes.destroy();
+    }
+    
+    analyticsCharts.actionTypes = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: ['Contato Direto', 'Email Follow-up', 'Reunião', 'Proposta Comercial', 'Suporte Técnico'],
+            datasets: [{
+                data: [35, 25, 20, 15, 5],
+                backgroundColor: [
+                    CHART_COLORS.primary,
+                    CHART_COLORS.warning,
+                    CHART_COLORS.info,
+                    CHART_COLORS.success,
+                    CHART_COLORS.danger
+                ]
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: {
+                        padding: 15,
+                        usePointStyle: true,
+                        font: { size: 10 }
+                    }
+                }
+            },
+            cutout: '60%'
+        }
+    });
+}
+
+function createReceitaNivelChart() {
+    const ctx = document.getElementById('chart-receita-nivel');
+    if (!ctx) return;
+    
+    if (analyticsCharts.receitaNivel) {
+        analyticsCharts.receitaNivel.destroy();
+    }
+    
+    analyticsCharts.receitaNivel = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: ['Premium', 'Gold', 'Silver', 'Bronze'],
+            datasets: [{
+                label: 'Receita Total (R$)',
+                data: [1250000, 890000, 520000, 190000],
+                backgroundColor: [
+                    CHART_COLORS.premium,
+                    CHART_COLORS.gold,
+                    CHART_COLORS.silver,
+                    CHART_COLORS.bronze
+                ],
+                borderRadius: 8
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false }
+            },
+            scales: {
+                x: { grid: { display: false } },
+                y: {
+                    beginAtZero: true,
+                    grid: { color: 'rgba(0,0,0,0.05)' },
+                    ticks: {
+                        callback: function(value) {
+                            return 'R$ ' + (value/1000) + 'K';
+                        }
+                    }
+                }
+            }
+        }
+    });
+}
+
+function createChurnEvolutionChart() {
+    const ctx = document.getElementById('chart-churn-evolution');
+    if (!ctx) return;
+    
+    if (analyticsCharts.churnEvolution) {
+        analyticsCharts.churnEvolution.destroy();
+    }
+    
+    // Dados simulados para os últimos 6 meses
+    const labels = [];
+    for (let i = 5; i >= 0; i--) {
+        const date = new Date();
+        date.setMonth(date.getMonth() - i);
+        labels.push(date.toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' }));
+    }
+    
+    analyticsCharts.churnEvolution = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: 'Ativos',
+                    data: [1245, 1287, 1298, 1325, 1342, 1356],
+                    borderColor: CHART_COLORS.success,
+                    backgroundColor: CHART_COLORS.success + '30',
+                    fill: true
+                },
+                {
+                    label: 'Dormant',
+                    data: [234, 198, 187, 165, 156, 142],
+                    borderColor: CHART_COLORS.warning,
+                    backgroundColor: CHART_COLORS.warning + '30',
+                    fill: true
+                },
+                {
+                    label: 'Inativos',
+                    data: [98, 87, 76, 68, 59, 52],
+                    borderColor: CHART_COLORS.danger,
+                    backgroundColor: CHART_COLORS.danger + '30',
+                    fill: true
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'top',
+                    labels: {
+                        usePointStyle: true,
+                        padding: 20
+                    }
+                }
+            },
+            scales: {
+                x: { grid: { display: false } },
+                y: {
+                    beginAtZero: true,
+                    grid: { color: 'rgba(0,0,0,0.05)' },
+                    stacked: false
+                }
+            },
+            interaction: {
+                intersect: false,
+                mode: 'index'
+            }
+        }
+    });
+}
+
+function createSatisfactionEvolutionChart() {
+    const ctx = document.getElementById('chart-satisfaction-evolution');
+    if (!ctx) return;
+    
+    if (analyticsCharts.satisfactionEvolution) {
+        analyticsCharts.satisfactionEvolution.destroy();
+    }
+    
+    // Dados simulados para os últimos 12 meses
+    const labels = [];
+    for (let i = 11; i >= 0; i--) {
+        const date = new Date();
+        date.setMonth(date.getMonth() - i);
+        labels.push(date.toLocaleDateString('pt-BR', { month: 'short' }));
+    }
+    
+    analyticsCharts.satisfactionEvolution = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: 'NPS',
+                    data: [45, 48, 52, 49, 56, 58, 61, 59, 63, 65, 67, 69],
+                    borderColor: CHART_COLORS.primary,
+                    backgroundColor: CHART_COLORS.primary + '20',
+                    yAxisID: 'y'
+                },
+                {
+                    label: 'Atendimento',
+                    data: [7.8, 8.1, 8.3, 8.0, 8.5, 8.7, 8.9, 8.6, 9.0, 9.1, 9.2, 9.3],
+                    borderColor: CHART_COLORS.info,
+                    backgroundColor: CHART_COLORS.info + '20',
+                    yAxisID: 'y1'
+                },
+                {
+                    label: 'Produto',
+                    data: [8.2, 8.4, 8.6, 8.3, 8.8, 8.9, 9.1, 8.8, 9.2, 9.3, 9.4, 9.5],
+                    borderColor: CHART_COLORS.success,
+                    backgroundColor: CHART_COLORS.success + '20',
+                    yAxisID: 'y1'
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'top',
+                    labels: {
+                        usePointStyle: true,
+                        padding: 20
+                    }
+                }
+            },
+            scales: {
+                x: { grid: { display: false } },
+                y: {
+                    type: 'linear',
+                    display: true,
+                    position: 'left',
+                    title: { display: true, text: 'NPS' },
+                    grid: { color: 'rgba(0,0,0,0.05)' }
+                },
+                y1: {
+                    type: 'linear',
+                    display: true,
+                    position: 'right',
+                    title: { display: true, text: 'Satisfação (0-10)' },
+                    grid: { drawOnChartArea: false },
+                    min: 0,
+                    max: 10
+                }
+            }
+        }
+    });
+}
+
+function createNPSSegmentsChart() {
+    const ctx = document.getElementById('chart-nps-segments');
+    if (!ctx) return;
+    
+    if (analyticsCharts.npsSegments) {
+        analyticsCharts.npsSegments.destroy();
+    }
+    
+    analyticsCharts.npsSegments = new Chart(ctx, {
+        type: 'radar',
+        data: {
+            labels: ['Premium', 'Gold', 'Silver', 'Bronze', 'Novos', 'Recorrentes'],
+            datasets: [{
+                label: 'NPS por Segmento',
+                data: [78, 65, 52, 38, 45, 71],
+                borderColor: CHART_COLORS.primary,
+                backgroundColor: CHART_COLORS.primary + '30',
+                pointBackgroundColor: CHART_COLORS.primary,
+                pointBorderColor: '#fff',
+                pointHoverBackgroundColor: '#fff',
+                pointHoverBorderColor: CHART_COLORS.primary
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false }
+            },
+            scales: {
+                r: {
+                    beginAtZero: true,
+                    max: 100,
+                    ticks: { stepSize: 20 }
+                }
+            }
+        }
+    });
+}
+
+function generateInsights() {
+    // Oportunidades de Crescimento
+    const growthHtml = `
+        <div class="insight-item mb-3">
+            <div class="d-flex align-items-center mb-2">
+                <i class="fas fa-arrow-trend-up text-success me-2"></i>
+                <strong>Expansão Premium</strong>
+            </div>
+            <p class="mb-1">43 clientes Gold com potencial para upgrade Premium.</p>
+            <small class="text-muted">Receita adicional estimada: R$ 180K</small>
+        </div>
+        
+        <div class="insight-item mb-3">
+            <div class="d-flex align-items-center mb-2">
+                <i class="fas fa-redo text-info me-2"></i>
+                <strong>Reativação</strong>
+            </div>
+            <p class="mb-1">28 clientes Dormant com histórico de alto valor.</p>
+            <small class="text-muted">Taxa de sucesso histórica: 67%</small>
+        </div>
+        
+        <div class="insight-item">
+            <div class="d-flex align-items-center mb-2">
+                <i class="fas fa-users text-primary me-2"></i>
+                <strong>Cross-selling</strong>
+            </div>
+            <p class="mb-1">156 oportunidades identificadas via análise comportamental.</p>
+            <small class="text-muted">Ticket médio potencial: R$ 2.400</small>
+        </div>
+    `;
+    
+    $('#growth-opportunities').html(growthHtml);
+    
+    // Alertas Críticos
+    const alertsHtml = `
+        <div class="alert-item mb-3 p-3 rounded" style="background: rgba(239, 68, 68, 0.1);">
+            <div class="d-flex align-items-center mb-2">
+                <i class="fas fa-exclamation-triangle text-danger me-2"></i>
+                <strong>NPS em Declínio</strong>
+            </div>
+            <p class="mb-1">Segmento Bronze: -8 pts nos últimos 30 dias.</p>
+            <small class="text-muted">Requer investigação imediata</small>
+        </div>
+        
+        <div class="alert-item mb-3 p-3 rounded" style="background: rgba(245, 158, 11, 0.1);">
+            <div class="d-flex align-items-center mb-2">
+                <i class="fas fa-clock text-warning me-2"></i>
+                <strong>SLA Crítico</strong>
+            </div>
+            <p class="mb-1">Tempo de resposta médio: 4.2h (Meta: <4h).</p>
+            <small class="text-muted">12 ações pendentes há >24h</small>
+        </div>
+        
+        <div class="alert-item p-3 rounded" style="background: rgba(239, 68, 68, 0.1);">
+            <div class="d-flex align-items-center mb-2">
+                <i class="fas fa-user-times text-danger me-2"></i>
+                <strong>Churn Iminente</strong>
+            </div>
+            <p class="mb-1">8 clientes Premium com probabilidade >80% de churn.</p>
+            <small class="text-muted">Valor em risco: R$ 145K</small>
+        </div>
+    `;
+    
+    $('#critical-alerts').html(alertsHtml);
+}
+
+function generateExecutiveReportContent() {
+    const reportHtml = `
+        <div class="row">
+            <div class="col-md-8">
+                <h5 class="mb-3">📊 Resumo Executivo - ${new Date().toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}</h5>
+                
+                <div class="mb-4">
+                    <h6 class="text-success">🎯 Principais Conquistas</h6>
+                    <ul class="list-unstyled ms-3">
+                        <li class="mb-2">✅ Taxa de retenção subiu para 78.3% (+2.1% vs mês anterior)</li>
+                        <li class="mb-2">✅ NPS geral alcançou 69 pontos (+4 pts vs trimestre anterior)</li>
+                        <li class="mb-2">✅ 127 ações de CS executadas com sucesso</li>
+                        <li class="mb-2">✅ Receita segura representa 84% do total da carteira</li>
+                    </ul>
+                </div>
+                
+                <div class="mb-4">
+                    <h6 class="text-warning">⚠️ Pontos de Atenção</h6>
+                    <ul class="list-unstyled ms-3">
+                        <li class="mb-2">• Taxa de execução de ações em 74.7% (Meta: 80%+)</li>
+                        <li class="mb-2">• 43 ações pendentes requerem atenção prioritária</li>
+                        <li class="mb-2">• Segmento Bronze apresenta NPS em declínio</li>
+                        <li class="mb-2">• R$ 456K em receita classificada como "em risco"</li>
+                    </ul>
+                </div>
+                
+                <div class="mb-4">
+                    <h6 class="text-info">🚀 Próximos Passos Recomendados</h6>
+                    <ol class="ms-3">
+                        <li class="mb-2">Implementar programa específico para clientes Bronze</li>
+                        <li class="mb-2">Acelerar execução das 43 ações pendentes (Meta: 100% em 7 dias)</li>
+                        <li class="mb-2">Focar nos 8 clientes Premium em risco iminente de churn</li>
+                        <li class="mb-2">Executar campanha de upgrade para 43 clientes Gold qualificados</li>
+                    </ol>
+                </div>
+            </div>
+            
+            <div class="col-md-4">
+                <div class="bg-light rounded p-3 mb-3">
+                    <h6 class="mb-3">📈 KPIs do Período</h6>
+                    <div class="row text-center">
+                        <div class="col-6 mb-3">
+                            <div class="h4 text-success">78.3%</div>
+                            <small>Taxa Retenção</small>
+                        </div>
+                        <div class="col-6 mb-3">
+                            <div class="h4 text-primary">69</div>
+                            <small>NPS Geral</small>
+                        </div>
+                        <div class="col-6 mb-3">
+                            <div class="h4 text-warning">74.7%</div>
+                            <small>Taxa Execução</small>
+                        </div>
+                        <div class="col-6 mb-3">
+                            <div class="h4 text-info">4.2h</div>
+                            <small>Tempo Médio</small>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="bg-light rounded p-3">
+                    <h6 class="mb-3">💰 Impacto Financeiro</h6>
+                    <p class="mb-2"><strong>Receita Total:</strong> R$ 2.85M</p>
+                    <p class="mb-2"><strong>Em Risco:</strong> R$ 456K (16%)</p>
+                    <p class="mb-0"><strong>Oportunidades:</strong> R$ 327K</p>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    $('#executive-report-content').html(reportHtml);
+}
+
+function generateExecutiveReport() {
+    showAlert('Gerando relatório executivo completo...', 'info');
+    
+    // Simular geração de relatório
+    setTimeout(() => {
+        showAlert('Relatório executivo gerado com sucesso!', 'success');
+    }, 2000);
+}
+
+function exportReport(format) {
+    if (format === 'pdf') {
+        showAlert('Exportando relatório em PDF...', 'info');
+    } else if (format === 'excel') {
+        showAlert('Exportando dados em Excel...', 'info');
+    }
+    
+    // Simular exportação
+    setTimeout(() => {
+        showAlert(`Relatório exportado em ${format.toUpperCase()} com sucesso!`, 'success');
+    }, 2000);
+}
+
+// Função para heatmap de risco
+function createRiskHeatmap() {
+    const segments = ['Premium', 'Gold', 'Silver', 'Bronze'];
+    const riskLevels = ['Baixo', 'Médio', 'Alto'];
+    
+    let heatmapHtml = '<div class="heatmap-container">';
+    
+    segments.forEach(segment => {
+        const risk = Math.random(); // Simular risco
+        let color = 'success';
+        if (risk > 0.7) color = 'danger';
+        else if (risk > 0.4) color = 'warning';
+        
+        heatmapHtml += `
+            <div class="heatmap-item mb-2">
+                <div class="d-flex justify-content-between align-items-center">
+                    <span>${segment}</span>
+                    <div class="badge bg-${color}" style="width: 60px;">
+                        ${(risk * 100).toFixed(0)}%
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+    
+    heatmapHtml += '</div>';
+    $('#risk-heatmap').html(heatmapHtml);
+}
+
+// Inicializar heatmap após carregamento
+setTimeout(createRiskHeatmap, 1000);
+</script>
+{% endblock %}
