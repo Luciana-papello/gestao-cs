@@ -485,30 +485,44 @@ def get_latest_update_date(df_pedidos: pd.DataFrame) -> str:
 
 # === ADICIONAR ESTAS FUNÇÕES NO FINAL DO data_utils.py ===
 
+# ENCONTRAR E SUBSTITUIR A FUNÇÃO INCOMPLETA get_executive_summary_data() 
+# no data_utils.py por esta versão completa:
+
 def get_executive_summary_data() -> Dict:
     """Carrega todos os dados necessários para a Visão Executiva - VERSÃO COMPLETA"""
     try:
+        print("📊 Iniciando carregamento dos dados executivos...")
+        
         # Carregar dados das planilhas
         df_clientes = load_google_sheet_public(Config.CLASSIFICACAO_SHEET_ID, "classificacao_clientes3")
         df_pedidos = load_google_sheet_public(Config.CLASSIFICACAO_SHEET_ID, "pedidos_com_id2")
         df_satisfacao = load_satisfaction_data()
         
+        print(f"✅ Dados carregados: {len(df_clientes)} clientes, {len(df_pedidos)} pedidos")
+        
         if df_clientes.empty:
+            print("❌ Planilha de clientes vazia")
             return {'error': 'Não foi possível carregar dados dos clientes'}
         
         # Processar dados dos clientes
         df_clientes = df_clientes.copy()
         df_clientes['priority_score'] = df_clientes.apply(calculate_priority_score, axis=1)
+        
+        # Converter receita para numérico (LINHA QUE ESTAVA INCOMPLETA)
         df_clientes['receita_num'] = pd.to_numeric(
             df_clientes['receita'].str.replace(',', '.'), 
             errors='coerce'
         ).fillna(0)
+        
+        print(f"✅ Dados processados: receita total R$ {df_clientes['receita_num'].sum():.0f}")
         
         # KPIs principais
         total_clientes = len(df_clientes)
         clientes_ativos = len(df_clientes[df_clientes['status_churn'] == 'Ativo'])
         clientes_criticos = len(df_clientes[df_clientes['priority_score'] >= 200])
         receita_total = df_clientes['receita_num'].sum()
+        
+        print(f"✅ KPIs calculados: {total_clientes} clientes, {clientes_ativos} ativos, {clientes_criticos} críticos")
         
         # Análise de recorrência (últimos 6 meses por padrão)
         data_fim = datetime.now()
@@ -568,7 +582,9 @@ def get_executive_summary_data() -> Dict:
             (df_clientes['risco_recencia'].isin(['Alto', 'Novo_Alto', 'Médio', 'Novo_Médio']))
         ]
         
-        # RETORNO COMPLETO
+        print("✅ Dados executivos processados com sucesso")
+        
+        # RETORNO COMPLETO (ERA ISSO QUE ESTAVA FALTANDO!)
         return {
             'kpis': {
                 'total_clientes': total_clientes,
@@ -594,8 +610,18 @@ def get_executive_summary_data() -> Dict:
         }
         
     except Exception as e:
-        print(f"Erro ao carregar dados executivos: {str(e)}")
+        print(f"❌ Erro ao carregar dados executivos: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return {'error': f'Erro ao processar dados: {str(e)}'}
+
+
+def clear_cache():
+    """Limpa o cache interno"""
+    global _cache, _cache_timestamps
+    _cache.clear()
+    _cache_timestamps.clear()
+    print("✅ Cache limpo com sucesso")
     
 
 def format_number(value, prefix="", suffix=""):
@@ -883,9 +909,3 @@ def calculate_satisfaction_metrics(df_satisfacao: pd.DataFrame, column_name: str
                 'total_respostas': len(respostas_atual)
             }
         }
-def clear_cache():
-    """Limpa o cache interno"""
-    global _cache, _cache_timestamps
-    _cache.clear()
-    _cache_timestamps.clear()
-    print("✅ Cache limpo com sucesso")
