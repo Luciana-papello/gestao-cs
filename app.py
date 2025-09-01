@@ -1,12 +1,16 @@
 from flask import Flask, render_template, jsonify, request
 from datetime import datetime, timedelta
 import json
+import pandas as pd  # ← ESTA IMPORTAÇÃO ESTAVA FALTANDO
 from config import Config
 from data_utils import (
     get_executive_summary_data, 
     load_google_sheet_public,
+    load_satisfaction_data,  # ← ESTA IMPORTAÇÃO ESTAVA FALTANDO
+    calculate_priority_score,  # ← ESTA IMPORTAÇÃO ESTAVA FALTANDO
     format_number,
-    format_phone_number
+    format_phone_number,
+    analyze_client_recurrence  # ← ESTA IMPORTAÇÃO ESTAVA FALTANDO
 )
 
 app = Flask(__name__)
@@ -210,22 +214,6 @@ def api_satisfaction_data():
     except Exception as e:
         return jsonify({'error': f'Erro ao calcular satisfação: {str(e)}'}), 500
 
-@app.route('/api/refresh-data')
-def api_refresh_data():
-    """API para forçar atualização dos dados (limpar cache)"""
-    try:
-        from data_utils import _cache, _cache_timestamps
-        _cache.clear()
-        _cache_timestamps.clear()
-        
-        return jsonify({
-            'success': True,
-            'message': 'Cache limpo com sucesso',
-            'timestamp': datetime.now().isoformat()
-        })
-        
-    except Exception as e:
-        return jsonify({'error': f'Erro ao atualizar dados: {str(e)}'}), 500
 
 # === FILTROS TEMPLATE ===
 

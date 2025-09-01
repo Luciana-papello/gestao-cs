@@ -150,26 +150,56 @@ def categorize_nps_from_text(text_score) -> str:
     return "Indefinido"
 
 def calculate_priority_score(row) -> float:
-    """Calcula score de prioridade para ordenação"""
-    priority_weights = {'Premium': 100, 'Gold': 80, 'Silver': 60, 'Bronze': 40}
-    churn_weights = {
-        'Dormant_Premium': 300, 'Dormant_Gold': 250, 'Dormant_Silver': 200,
-        'Dormant_Bronze': 150, 'Dormant_Novo': 120, 'Inativo': 100, 'Ativo': 0
-    }
-    risk_weights = {
-        'Novo_Alto': 80, 'Alto': 50, 'Novo_Médio': 40,
-        'Médio': 30, 'Novo_Baixo': 20, 'Baixo': 10
-    }
-    
-    nivel = row.get('nivel_cliente', 'Bronze')
-    risco = row.get('risco_recencia', 'Baixo')
-    churn = row.get('status_churn', 'Ativo')
-    top20 = 1 if row.get('top_20_valor', 'Não') == 'Sim' else 0
-    
-    return (priority_weights.get(nivel, 0) + 
-            risk_weights.get(risco, 0) + 
+    """Calcula score de prioridade para ordenação de clientes"""
+    try:
+        # Pesos para níveis de cliente
+        priority_weights = {
+            'Premium': 100, 
+            'Gold': 80, 
+            'Silver': 60, 
+            'Bronze': 40
+        }
+        
+        # Pesos para status de churn
+        churn_weights = {
+            'Dormant_Premium': 300, 
+            'Dormant_Gold': 250, 
+            'Dormant_Silver': 200,
+            'Dormant_Bronze': 150, 
+            'Dormant_Novo': 120, 
+            'Inativo': 100, 
+            'Ativo': 0
+        }
+        
+        # Pesos para risco de recência
+        risk_weights = {
+            'Novo_Alto': 80, 
+            'Alto': 50, 
+            'Novo_Médio': 40,
+            'Médio': 30, 
+            'Novo_Baixo': 20, 
+            'Baixo': 10
+        }
+        
+        # Extrair valores da linha (usando .get() para evitar KeyError)
+        nivel = row.get('nivel_cliente', 'Bronze')
+        risco = row.get('risco_recencia', 'Baixo')
+        churn = row.get('status_churn', 'Ativo')
+        top20 = 1 if row.get('top_20_valor', 'Não') == 'Sim' else 0
+        
+        # Calcular score final
+        score = (
+            priority_weights.get(nivel, 40) + 
+            risk_weights.get(risco, 10) + 
             churn_weights.get(churn, 0) + 
-            top20 * 25)
+            top20 * 25
+        )
+        
+        return float(score)
+        
+    except Exception as e:
+        print(f"Erro ao calcular priority score: {str(e)}")
+        return 0.0
 
 def calculate_satisfaction_metrics(df_satisfacao: pd.DataFrame, column_name: str, 
                                  is_nps: bool = False, data_inicio=None, data_fim=None) -> Dict:
@@ -345,6 +375,7 @@ def analyze_client_recurrence(df_pedidos: pd.DataFrame, data_inicio=None, data_f
         missing_cols = [col for col in required_cols if col not in df_pedidos.columns]
         
         if missing_cols:
+            print(f"Colunas em falta para análise de recorrência: {missing_cols}")
             return {}
         
         df_work = df_pedidos.copy()
@@ -380,6 +411,7 @@ def analyze_client_recurrence(df_pedidos: pd.DataFrame, data_inicio=None, data_f
         pedidos_primeira_compra = 0
         pedidos_recompra = 0
         
+        # Contar pedidos por tipo
         for variation in primeira_variations:
             count = len(df_valid[df_valid['status_pedido_clean'].str.contains(variation, na=False)])
             if count > 0:
@@ -394,7 +426,7 @@ def analyze_client_recurrence(df_pedidos: pd.DataFrame, data_inicio=None, data_f
         
         clientes_unicos = df_valid['cliente_unico_id'].nunique()
         
-        # Taxa de conversão
+        # Taxa de conversão (clientes que fizeram primeira compra E recompra)
         taxa_conversao = 0
         if clientes_unicos > 0 and pedidos_primeira_compra > 0:
             try:
@@ -404,17 +436,20 @@ def analyze_client_recurrence(df_pedidos: pd.DataFrame, data_inicio=None, data_f
                 df_recompra = df_valid[df_valid['status_pedido_clean'].str.contains('|'.join(recompra_variations), na=False)]
                 clientes_recompra = set(df_recompra['cliente_unico_id'])
                 
+                # Clientes que aparecem em ambos os conjuntos
                 clientes_convertidos = len(clientes_primeira.intersection(clientes_recompra))
                 taxa_conversao = (clientes_convertidos / len(clientes_primeira)) * 100 if len(clientes_primeira) > 0 else 0
-            except:
+            except Exception as e:
+                print(f"Erro ao calcular taxa de conversão: {str(e)}")
                 taxa_conversao = 0
         
         # Tickets médios
         try:
+            # Limpar e converter valores
             df_valid['valor_numerico'] = pd.to_numeric(
-                df_valid['valor_do_pedido'].astype(str).str.replace(',', '.').str.replace('[^\d.]', '', regex=True), 
+                df_valid['valor_do_pedido'].astype(str).str.replace(',', '.').str.replace(r'[^\d.]', '', regex=True), 
                 errors='coerce'
-            )
+            ).fillna(0)
         except:
             df_valid['valor_numerico'] = 0
         
