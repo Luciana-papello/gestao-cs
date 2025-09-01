@@ -8,9 +8,9 @@ class Config:
     SECRET_KEY = os.environ.get('SECRET_KEY') or 'papello-dashboard-secret-key-2025'
     DEBUG = os.environ.get('DEBUG', 'True').lower() == 'true'
     
-    # IDs das planilhas Google Sheets
+    # IDs das planilhas Google Sheets - CORRIGIDOS
     CLASSIFICACAO_SHEET_ID = "1ZKgy7jCXUzkU0oaOw5IdnezKuJrCtGOeqiks2el0olE"
-    PESQUISA_SHEET_ID = "1ZKgy7jCXUzkU0oaOw5IdnezKuJrCtGOeqiks2el0olE"
+    PESQUISA_SHEET_ID = "1Z-Q2l75JMSwvFYI7EY4DqLywbDhCTH_2rlYXD4QdaGw"  # ← CORRIGIDO!
     
     # Cores da marca Papello
     COLORS = {

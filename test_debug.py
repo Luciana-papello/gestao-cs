@@ -1,179 +1,176 @@
 #!/usr/bin/env python3
 """
-Script de Debug - Dashboard Papello
-Use este arquivo para testar e identificar problemas
+Teste Específico - Verificar Dados Refinados
 """
 
-def test_basic_imports():
-    """Testa importações básicas"""
-    print("🔧 Testando importações básicas...")
+def test_new_sheet_ids():
+    """Testa os novos IDs das planilhas"""
+    print("🔧 Testando novos IDs das planilhas...")
+    
     try:
-        import pandas as pd
-        print("✅ pandas OK")
-        
-        import requests
-        print("✅ requests OK")
-        
-        from datetime import datetime
-        print("✅ datetime OK")
-        
-        from config import Config
-        print(f"✅ Config OK - Sheet ID: {Config.CLASSIFICACAO_SHEET_ID[:10]}...")
-        
-        return True
-    except Exception as e:
-        print(f"❌ Erro nas importações básicas: {str(e)}")
-        return False
-
-def test_data_utils_imports():
-    """Testa importações do data_utils"""
-    print("\n🔧 Testando importações do data_utils...")
-    try:
-        from data_utils import load_google_sheet_public
-        print("✅ load_google_sheet_public OK")
-        
-        from data_utils import load_satisfaction_data
-        print("✅ load_satisfaction_data OK")
-        
-        from data_utils import calculate_priority_score
-        print("✅ calculate_priority_score OK")
-        
-        from data_utils import format_number
-        print("✅ format_number OK")
-        
-        return True
-    except Exception as e:
-        print(f"❌ Erro nas importações do data_utils: {str(e)}")
-        return False
-
-def test_google_sheets_connection():
-    """Testa conexão com Google Sheets"""
-    print("\n🔧 Testando conexão com Google Sheets...")
-    try:
-        from data_utils import load_google_sheet_public
+        from data_utils import load_google_sheet_public, load_satisfaction_data
         from config import Config
         
-        print("📊 Carregando planilha de clientes...")
+        print(f"📋 ID Classificação: {Config.CLASSIFICACAO_SHEET_ID}")
+        print(f"📋 ID Pesquisa: {Config.PESQUISA_SHEET_ID}")
+        
+        # Testar planilha de clientes
+        print("📊 Carregando clientes...")
         df_clientes = load_google_sheet_public(Config.CLASSIFICACAO_SHEET_ID, "classificacao_clientes3")
         
         if df_clientes.empty:
-            print("⚠️  Planilha de clientes vazia")
+            print("❌ Planilha de clientes vazia ou inacessível")
             return False
-            
-        print(f"✅ Clientes carregados: {len(df_clientes)} registros")
-        print(f"✅ Colunas: {list(df_clientes.columns)[:5]}...")  # Primeiras 5 colunas
+        
+        print(f"✅ Clientes: {len(df_clientes)} registros")
+        print(f"📋 Colunas clientes: {list(df_clientes.columns)[:10]}...")
+        
+        # Testar planilha de pedidos
+        print("📊 Carregando pedidos...")
+        df_pedidos = load_google_sheet_public(Config.CLASSIFICACAO_SHEET_ID, "pedidos_com_id2")
+        
+        if not df_pedidos.empty:
+            print(f"✅ Pedidos: {len(df_pedidos)} registros")
+        else:
+            print("⚠️  Planilha de pedidos vazia")
+        
+        # Testar planilha de satisfação com nova aba
+        print("📊 Carregando satisfação...")
+        df_satisfacao = load_satisfaction_data()
+        
+        if not df_satisfacao.empty:
+            print(f"✅ Satisfação: {len(df_satisfacao)} respostas")
+            print(f"📋 Colunas satisfação: {list(df_satisfacao.columns)[:5]}...")
+        else:
+            print("⚠️  Planilha de satisfação vazia ou aba incorreta")
         
         return True
+        
     except Exception as e:
-        print(f"❌ Erro na conexão: {str(e)}")
+        print(f"❌ Erro ao testar planilhas: {str(e)}")
         return False
 
-def test_executive_summary_function():
-    """Testa a função get_executive_summary_data"""
-    print("\n🔧 Testando função get_executive_summary_data...")
+def test_executive_summary():
+    """Testa a função refinada de summary"""
+    print("\n🔧 Testando função executive summary refinada...")
+    
     try:
         from data_utils import get_executive_summary_data
-        print("✅ Função importada com sucesso")
         
-        print("📊 Executando get_executive_summary_data...")
+        print("📊 Executando get_executive_summary_data refinada...")
         data = get_executive_summary_data()
         
         if 'error' in data:
             print(f"❌ Erro na função: {data['error']}")
             return False
-            
+        
+        print("✅ Dados carregados com sucesso!")
+        
+        # Verificar KPIs
         if 'kpis' in data:
-            print("✅ KPIs encontrados:")
             kpis = data['kpis']
-            print(f"   - Total Clientes: {kpis.get('total_clientes', 'N/A')}")
-            print(f"   - Clientes Ativos: {kpis.get('clientes_ativos', 'N/A')}")
-            print(f"   - Taxa Retenção: {kpis.get('taxa_retencao', 'N/A')}%")
-            print(f"   - Receita Total: R$ {kpis.get('receita_total', 'N/A')}")
-            return True
-        else:
-            print("❌ KPIs não encontrados no retorno")
-            print(f"Retorno recebido: {list(data.keys())}")
-            return False
-            
+            print(f"\n📊 KPIs REFINADOS:")
+            print(f"   - Total Clientes: {kpis.get('total_clientes', 'N/A'):,}")
+            print(f"   - Clientes Ativos: {kpis.get('clientes_ativos', 'N/A'):,}")
+            print(f"   - Taxa Retenção: {kpis.get('taxa_retencao', 'N/A'):.2f}%")
+            print(f"   - Clientes Críticos: {kpis.get('clientes_criticos', 'N/A'):,}")
+            print(f"   - Taxa Críticos: {kpis.get('taxa_criticos', 'N/A'):.2f}%")
+            print(f"   - Receita Total: R$ {kpis.get('receita_total', 0):,.2f}")
+        
+        # Verificar satisfação
+        if 'satisfaction' in data and data['satisfaction']:
+            print(f"\n⭐ SATISFAÇÃO:")
+            for key, value in data['satisfaction'].items():
+                print(f"   - {key.title()}: {value.get('value', 'N/A')} ({value.get('trend', 'N/A')})")
+        
+        # Verificar distribuições
+        if 'distributions' in data and data['distributions']:
+            print(f"\n📊 DISTRIBUIÇÕES:")
+            for key, dist in data['distributions'].items():
+                if dist:
+                    print(f"   - {key.title()}: {len(dist)} categorias")
+                    for cat, count in list(dist.items())[:3]:  # Primeiros 3
+                        print(f"     • {cat}: {count}")
+        
+        # Info de debug
+        if 'debug_info' in data:
+            debug = data['debug_info']
+            print(f"\n🔍 DEBUG INFO:")
+            print(f"   - Clientes carregados: {debug.get('total_clients_loaded', 'N/A')}")
+            print(f"   - Respostas satisfação: {debug.get('satisfaction_responses', 'N/A')}")
+            print(f"   - Colunas clientes: {debug.get('columns_clients', [])}")
+            print(f"   - Colunas satisfação: {debug.get('columns_satisfaction', [])}")
+        
+        return True
+        
     except Exception as e:
-        print(f"❌ Erro ao testar função: {str(e)}")
-        print(f"Tipo do erro: {type(e).__name__}")
+        print(f"❌ Erro ao testar executive summary: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return False
 
-def test_api_endpoint():
-    """Testa o endpoint da API"""
-    print("\n🔧 Testando endpoint /api/executive-data...")
+def test_api_formatting():
+    """Testa a formatação da API"""
+    print("\n🔧 Testando formatação da API...")
+    
     try:
         import requests
         
-        # Testar se o servidor está rodando
+        # Testar API
         response = requests.get("http://localhost:5000/api/executive-data", timeout=10)
         
         if response.status_code == 200:
             data = response.json()
             print("✅ API respondeu com sucesso")
+            
             if 'kpis' in data:
-                print("✅ Dados KPIs encontrados na API")
-                return True
-            else:
-                print("❌ Dados KPIs não encontrados na resposta da API")
-                print(f"Chaves encontradas: {list(data.keys())}")
-                return False
+                print(f"📊 KPIs formatados:")
+                kpis = data['kpis']
+                for key, kpi in kpis.items():
+                    print(f"   - {key}: {kpi.get('value', 'N/A')} ({kpi.get('subtitle', '')})")
+            
+            return True
         else:
             print(f"❌ API retornou erro: {response.status_code}")
-            print(f"Resposta: {response.text}")
+            print(f"Resposta: {response.text[:200]}...")
             return False
             
     except requests.exceptions.ConnectionError:
-        print("❌ Servidor não está rodando. Execute 'python app.py' primeiro")
+        print("❌ Flask não está rodando. Execute 'python app.py' primeiro")
         return False
     except Exception as e:
         print(f"❌ Erro ao testar API: {str(e)}")
         return False
 
 def main():
-    """Executa todos os testes"""
-    print("🎯 DASHBOARD PAPELLO - DEBUG E TESTES")
+    """Executa todos os testes refinados"""
+    print("🎯 TESTE REFINADO - DADOS PAPELLO")
     print("=" * 50)
     
-    tests = [
-        ("Importações Básicas", test_basic_imports),
-        ("Importações Data Utils", test_data_utils_imports),
-        ("Conexão Google Sheets", test_google_sheets_connection),
-        ("Função Executive Summary", test_executive_summary_function),
-    ]
+    # Teste 1: IDs das planilhas
+    sheets_ok = test_new_sheet_ids()
     
-    results = []
-    for test_name, test_func in tests:
-        result = test_func()
-        results.append((test_name, result))
+    # Teste 2: Função refinada
+    function_ok = test_executive_summary()
+    
+    # Teste 3: API (opcional, se Flask estiver rodando)
+    api_ok = test_api_formatting()
     
     print("\n" + "=" * 50)
-    print("📋 RESUMO DOS TESTES:")
+    print("📋 RESUMO DOS TESTES REFINADOS:")
     print("=" * 50)
     
-    all_passed = True
-    for test_name, passed in results:
-        status = "✅ PASSOU" if passed else "❌ FALHOU"
-        print(f"{test_name:.<30} {status}")
-        if not passed:
-            all_passed = False
+    print(f"Planilhas.......... {'✅ OK' if sheets_ok else '❌ FALHOU'}")
+    print(f"Função Summary..... {'✅ OK' if function_ok else '❌ FALHOU'}")
+    print(f"API Formatting..... {'✅ OK' if api_ok else '⚠️ FLASK OFF'}")
     
-    print("\n" + "=" * 50)
-    if all_passed:
-        print("🎉 TODOS OS TESTES PASSARAM!")
-        print("Agora teste o endpoint da API:")
-        print("1. Execute: python app.py")
-        print("2. Execute: python test_debug.py --api")
+    if sheets_ok and function_ok:
+        print(f"\n🎉 DADOS REFINADOS FUNCIONANDO!")
+        print("Execute 'python app.py' e teste no navegador")
     else:
-        print("❌ ALGUNS TESTES FALHARAM")
-        print("Corrija os problemas acima antes de continuar")
+        print(f"\n❌ CORRIJA OS PROBLEMAS ACIMA")
     
     print("=" * 50)
 
 if __name__ == "__main__":
-    import sys
-    if "--api" in sys.argv:
-        test_api_endpoint()
-    else:
-        main()
+    main()

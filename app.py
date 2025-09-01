@@ -6,9 +6,10 @@ from config import Config
 from data_utils import (
     get_executive_summary_data, 
     load_google_sheet_public,
-    load_satisfaction_data,     # ← ADICIONAR ESTA LINHA
-    calculate_priority_score,   # ← ADICIONAR ESTA LINHA  
-    analyze_client_recurrence,  # ← ADICIONAR ESTA LINHA
+    load_satisfaction_data,
+    calculate_priority_score,
+    analyze_client_recurrence,
+    clear_cache,  # <-- ADICIONE ESTA
     format_number,
     format_phone_number
 )
@@ -45,35 +46,37 @@ def actions_center():
 
 @app.route('/api/executive-data')
 def api_executive_data():
-    """API que retorna dados para a Visão Executiva"""
+    """API que retorna dados para a Visão Executiva - VERSÃO REFINADA"""
     try:
+        print("🔄 Processando requisição /api/executive-data...")
         data = get_executive_summary_data()
         
         if 'error' in data:
+            print(f"❌ Erro nos dados: {data['error']}")
             return jsonify({'error': data['error']}), 500
         
-        # Formatar dados para o frontend
+        # Formatar dados para o frontend com PRECISÃO
         formatted_data = {
             'kpis': {
                 'total_clientes': {
-                    'value': format_number(data['kpis']['total_clientes']),
+                    'value': f"{data['kpis']['total_clientes']:,}".replace(',', '.'),
                     'raw': data['kpis']['total_clientes'],
                     'subtitle': 'Últimos 24 meses'
                 },
                 'taxa_retencao': {
                     'value': f"{data['kpis']['taxa_retencao']:.1f}%",
                     'raw': data['kpis']['taxa_retencao'],
-                    'subtitle': f"{format_number(data['kpis']['clientes_ativos'])} clientes ativos",
-                    'color_class': 'success' if data['kpis']['taxa_retencao'] >= 70 else 'warning'
+                    'subtitle': f"{data['kpis']['clientes_ativos']:,} clientes ativos".replace(',', '.'),
+                    'color_class': 'success' if data['kpis']['taxa_retencao'] >= 70 else 'warning' if data['kpis']['taxa_retencao'] >= 50 else 'danger'
                 },
                 'taxa_criticos': {
                     'value': f"{data['kpis']['taxa_criticos']:.1f}%",
                     'raw': data['kpis']['taxa_criticos'],
-                    'subtitle': f"{format_number(data['kpis']['clientes_criticos'])} precisam atenção",
+                    'subtitle': f"{data['kpis']['clientes_criticos']:,} precisam atenção".replace(',', '.'),
                     'color_class': 'danger' if data['kpis']['taxa_criticos'] >= 15 else 'warning' if data['kpis']['taxa_criticos'] >= 10 else 'success'
                 },
                 'receita_total': {
-                    'value': format_number(data['kpis']['receita_total'], 'R$ ', ''),
+                    'value': format_currency_precise(data['kpis']['receita_total']),
                     'raw': data['kpis']['receita_total'],
                     'subtitle': 'Últimos 24 meses'
                 }
@@ -86,10 +89,38 @@ def api_executive_data():
             'timestamp': datetime.now().isoformat()
         }
         
+        print(f"✅ Dados formatados enviados - Total clientes: {formatted_data['kpis']['total_clientes']['value']}")
         return jsonify(formatted_data)
         
     except Exception as e:
+        print(f"❌ Erro na API executive-data: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'error': f'Erro ao carregar dados: {str(e)}'}), 500
+
+def format_currency_precise(value):
+    """Formata moeda de forma mais precisa (sem arredondamento excessivo)"""
+    if pd.isna(value) or value == 0:
+        return "R$ 0"
+    
+    try:
+        num = float(value)
+        
+        # Para valores muito grandes (dezenas de milhões), usar M
+        if abs(num) >= 50000000:  # 50M+
+            return f"R$ {num/1000000:.1f}M"
+        # Para valores grandes (milhões), usar M com mais precisão
+        elif abs(num) >= 1000000:  # 1M+
+            return f"R$ {num/1000000:.2f}M"
+        # Para valores médios (centenas de milhares), usar K
+        elif abs(num) >= 500000:  # 500K+
+            return f"R$ {num/1000:.0f}K"
+        # Para outros valores, mostrar completo com formatação brasileira
+        else:
+            return f"R$ {num:,.0f}".replace(',', '.')
+            
+    except (ValueError, TypeError):
+        return f"R$ {value}"
 
 @app.route('/api/recurrence-data')
 def api_recurrence_data():
@@ -310,12 +341,12 @@ def api_analytics_data():
         
     except Exception as e:
         return jsonify({'error': f'Erro ao carregar analytics: {str(e)}'}), 500
+
 @app.route('/api/refresh-data')
 def api_refresh_data():
     """API para limpar cache e forçar atualização dos dados"""
     try:
         # Limpar cache interno
-        from data_utils import clear_cache
         clear_cache()
         
         return jsonify({
