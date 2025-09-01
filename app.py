@@ -322,6 +322,51 @@ def api_analytics_data():
         
     except Exception as e:
         return jsonify({'error': f'Erro ao carregar analytics: {str(e)}'}), 500
-    
+@app.route('/api/refresh-data')
+def api_refresh_data():
+    """API para limpar cache e forçar atualização dos dados"""
+    try:
+        # Limpar cache interno
+        from data_utils import clear_cache
+        clear_cache()
+        
+        return jsonify({
+            'status': 'success',
+            'message': 'Cache limpo com sucesso',
+            'timestamp': datetime.now().isoformat()
+        })
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': f'Erro ao limpar cache: {str(e)}'
+        }), 500
+
+@app.route('/api/health')
+def api_health_check():
+    """Health check para verificar status do sistema"""
+    try:
+        # Testar carregamento rápido dos dados
+        df_clientes = load_google_sheet_public(Config.CLASSIFICACAO_SHEET_ID, "classificacao_clientes3")
+        
+        return jsonify({
+            'status': 'healthy',
+            'data_available': not df_clientes.empty,
+            'total_clients': len(df_clientes) if not df_clientes.empty else 0,
+            'timestamp': datetime.now().isoformat(),
+            'version': '1.0.0'
+        })
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': str(e),
+            'timestamp': datetime.now().isoformat()
+        }), 500
+
+if __name__ == '__main__':
+    print("🚀 Iniciando Dashboard Papello...")
+    print("📊 Acesso: http://localhost:5000")
+    print("🔄 Para atualizar dados: Ctrl+F5 ou botão 'Atualizar Dados'")
+    print("⚙️  Para parar: Ctrl+C")
+    app.run(debug=True, host='0.0.0.0', port=5000)    
 if __name__ == '__main__':
     app.run(debug=Config.DEBUG, host='0.0.0.0', port=5000)

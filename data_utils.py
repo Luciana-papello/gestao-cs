@@ -476,106 +476,118 @@ def get_latest_update_date(df_pedidos: pd.DataFrame) -> str:
 
 def get_executive_summary_data() -> Dict:
     """Carrega todos os dados necessários para a Visão Executiva"""
-    # Carregar dados das planilhas
-    df_clientes = load_google_sheet_public(Config.CLASSIFICACAO_SHEET_ID, "classificacao_clientes3")
-    df_pedidos = load_google_sheet_public(Config.CLASSIFICACAO_SHEET_ID, "pedidos_com_id2")
-    df_satisfacao = load_satisfaction_data()
+    try:
+        # Carregar dados das planilhas
+        df_clientes = load_google_sheet_public(Config.CLASSIFICACAO_SHEET_ID, "classificacao_clientes3")
+        df_pedidos = load_google_sheet_public(Config.CLASSIFICACAO_SHEET_ID, "pedidos_com_id2")
+        df_satisfacao = load_satisfaction_data()
+        
+        if df_clientes.empty:
+            return {'error': 'Não foi possível carregar dados dos clientes'}
+        
+        # Processar dados dos clientes
+        df_clientes = df_clientes.copy()
+        df_clientes['priority_score'] = df_clientes.apply(calculate_priority_score, axis=1)
+        
+        # Converter receita para numérico (replicando lógica do dash3.py)
+        df_clientes['receita_num'] = pd.to_numeric(
+            df_clientes['receita'].str.replace(',', '.'), 
+            errors='coerce'
+        ).fillna(0)
+        
+        # KPIs principais (exatamente como no dash3.py)
+        total_clientes = len(df_clientes)
+        clientes_ativos = len(df_clientes[df_clientes['status_churn'] == 'Ativo'])
+        clientes_criticos = len(df_clientes[df_clientes['priority_score'] >= 200])
+        receita_total = df_clientes['receita_num'].sum()
+        
+        # Análise de recorrência (últimos 6 meses por padrão)
+        data_fim = datetime.now()
+        data_inicio = data_fim - timedelta(days=180)
+        recurrence_data = analyze_client_recurrence(df_pedidos, data_inicio, data_fim)
+        
+        # Buscar colunas de satisfação automaticamente
+        satisfaction_columns = {
+            'atendimento': None,
+            'produto': None,
+            'prazo': None,
+            'nps': None
+        }
+        
+        if not df_satisfacao.empty:
+            for col in df_satisfacao.columns:
+                col_lower = col.lower()
+                if 'atendimento' in col_lower and not satisfaction_columns['atendimento']:
+                    satisfaction_columns['atendimento'] = col
+                elif 'produto' in col_lower and not satisfaction_columns['produto']:
+                    satisfaction_columns['produto'] = col
+                elif 'prazo' in col_lower and not satisfaction_columns['prazo']:
+                    satisfaction_columns['prazo'] = col
+                elif any(x in col_lower for x in ['possibilidade', 'recomenda']) and not satisfaction_columns['nps']:
+                    satisfaction_columns['nps'] = col
+        
+        # Calcular métricas de satisfação
+        satisfaction_metrics = {}
+        for metric_name, column_name in satisfaction_columns.items():
+            if column_name:
+                is_nps = (metric_name == 'nps')
+                satisfaction_metrics[metric_name] = calculate_satisfaction_metrics(
+                    df_satisfacao, column_name, is_nps
+                )
+            else:
+                satisfaction_metrics[metric_name] = {
+                    'value': 'N/A',
+                    'trend': 'Coluna não encontrada',
+                    'color_class': 'info',
+                    'details': {}
+                }
+        
+        # Distribuições para gráficos
+        nivel_distribution = df_clientes['nivel_cliente'].value_counts().to_dict()
+        churn_distribution = df_clientes['status_churn'].value_counts().to_dict()
+        
+        # Análise de risco agrupado
+        risco_agrupado = df_clientes['risco_recencia'].map({
+            'Alto': 'Alto Risco', 'Novo_Alto': 'Alto Risco',
+            'Médio': 'Médio Risco', 'Novo_Médio': 'Médio Risco', 
+            'Baixo': 'Baixo Risco', 'Novo_Baixo': 'Baixo Risco'
+        }).fillna('Sem Classificação').value_counts().to_dict()
+        
+        # Clientes Premium em risco para análise crítica
+        premium_em_risco = df_clientes[
+            (df_clientes['nivel_cliente'].isin(['Premium', 'Gold'])) &
+            (df_clientes['risco_recencia'].isin(['Alto', 'Novo_Alto', 'Médio', 'Novo_Médio']))
+        ]
+        
+        # Retornar dados estruturados
+        return {
+            'kpis': {
+                'total_clientes': total_clientes,
+                'clientes_ativos': clientes_ativos,
+                'taxa_retencao': (clientes_ativos / total_clientes * 100) if total_clientes > 0 else 0,
+                'clientes_criticos': clientes_criticos,
+                'taxa_criticos': (clientes_criticos / total_clientes * 100) if total_clientes > 0 else 0,
+                'receita_total': receita_total
+            },
+            'recurrence': recurrence_data,
+            'satisfaction': satisfaction_metrics,
+            'distributions': {
+                'nivel': nivel_distribution,
+                'churn': churn_distribution,
+                'risco': risco_agrupado
+            },
+            'critical_analysis': {
+                'premium_em_risco': len(premium_em_risco),
+                'total_premium': len(df_clientes[df_clientes['nivel_cliente'].isin(['Premium', 'Gold'])]),
+                'receita_em_risco': premium_em_risco['receita_num'].sum() if len(premium_em_risco) > 0 else 0
+            },
+            'latest_update': get_latest_update_date(df_pedidos)
+        }
+        
+    except Exception as e:
+        print(f"Erro ao carregar dados executivos: {str(e)}")
+        return {'error': f'Erro ao processar dados: {str(e)}'}
     
-    if df_clientes.empty:
-        return {'error': 'Não foi possível carregar dados dos clientes'}
-    
-    # Processar dados dos clientes
-    df_clientes = df_clientes.copy()
-    df_clientes['priority_score'] = df_clientes.apply(calculate_priority_score, axis=1)
-    df_clientes['receita_num'] = pd.to_numeric(df_clientes['receita'].str.replace(',', '.'), errors='coerce')
-    
-    # KPIs principais
-    total_clientes = len(df_clientes)
-    clientes_ativos = len(df_clientes[df_clientes['status_churn'] == 'Ativo'])
-    clientes_criticos = len(df_clientes[df_clientes['priority_score'] >= 200])
-    receita_total = df_clientes['receita_num'].sum()
-    
-    # Análise de recorrência (últimos 6 meses por padrão)
-    data_fim = datetime.now()
-    data_inicio = data_fim - timedelta(days=180)
-    recurrence_data = analyze_client_recurrence(df_pedidos, data_inicio, data_fim)
-    
-    # Buscar colunas de satisfação automaticamente
-    satisfaction_columns = {
-        'atendimento': None,
-        'produto': None,
-        'prazo': None,
-        'nps': None
-    }
-    
-    if not df_satisfacao.empty:
-        for col in df_satisfacao.columns:
-            col_lower = col.lower()
-            if 'atendimento' in col_lower and not satisfaction_columns['atendimento']:
-                satisfaction_columns['atendimento'] = col
-            elif 'produto' in col_lower and not satisfaction_columns['produto']:
-                satisfaction_columns['produto'] = col
-            elif 'prazo' in col_lower and not satisfaction_columns['prazo']:
-                satisfaction_columns['prazo'] = col
-            elif any(x in col_lower for x in ['possibilidade', 'recomenda']) and not satisfaction_columns['nps']:
-                satisfaction_columns['nps'] = col
-    
-    # Calcular métricas de satisfação
-    satisfaction_metrics = {}
-    for metric_name, column_name in satisfaction_columns.items():
-        if column_name:
-            is_nps = (metric_name == 'nps')
-            satisfaction_metrics[metric_name] = calculate_satisfaction_metrics(
-                df_satisfacao, column_name, is_nps
-            )
-        else:
-            satisfaction_metrics[metric_name] = {
-                'value': 'N/A',
-                'trend': 'Coluna não encontrada',
-                'color_class': 'info',
-                'details': {}
-            }
-    
-    # Distribuições para gráficos
-    nivel_distribution = df_clientes['nivel_cliente'].value_counts().to_dict()
-    churn_distribution = df_clientes['status_churn'].value_counts().to_dict()
-    
-    # Análise de risco agrupado
-    risco_agrupado = df_clientes['risco_recencia'].map({
-        'Alto': 'Alto Risco', 'Novo_Alto': 'Alto Risco',
-        'Médio': 'Médio Risco', 'Novo_Médio': 'Médio Risco', 
-        'Baixo': 'Baixo Risco', 'Novo_Baixo': 'Baixo Risco'
-    }).value_counts().to_dict()
-    
-    # Clientes Premium em risco para análise crítica
-    premium_em_risco = df_clientes[
-        (df_clientes['nivel_cliente'].isin(['Premium', 'Gold'])) &
-        (df_clientes['risco_recencia'].isin(['Alto', 'Novo_Alto', 'Médio', 'Novo_Médio']))
-    ]
-    
-    return {
-        'kpis': {
-            'total_clientes': total_clientes,
-            'clientes_ativos': clientes_ativos,
-            'taxa_retencao': (clientes_ativos / total_clientes * 100) if total_clientes > 0 else 0,
-            'clientes_criticos': clientes_criticos,
-            'taxa_criticos': (clientes_criticos / total_clientes * 100) if total_clientes > 0 else 0,
-            'receita_total': receita_total
-        },
-        'recurrence': recurrence_data,
-        'satisfaction': satisfaction_metrics,
-        'distributions': {
-            'nivel': nivel_distribution,
-            'churn': churn_distribution,
-            'risco': risco_agrupado
-        },
-        'critical_analysis': {
-            'premium_em_risco': len(premium_em_risco),
-            'total_premium': len(df_clientes[df_clientes['nivel_cliente'].isin(['Premium', 'Gold'])]),
-            'receita_em_risco': premium_em_risco['receita_num'].sum() if len(premium_em_risco) > 0 else 0
-        },
-        'latest_update': get_latest_update_date(df_pedidos)
-    }
 def calculate_priority_score(row):
     """Calcula score de prioridade para ordenação"""
     priority_weights = {'Premium': 100, 'Gold': 80, 'Silver': 60, 'Bronze': 40}
@@ -619,3 +631,271 @@ def format_phone_number(phone):
         phone_str = phone_str[:-2]
     
     return phone_str
+def clear_cache():
+    """Limpa o cache interno"""
+    global _cache, _cache_timestamps
+    _cache.clear()
+    _cache_timestamps.clear()
+    print("✅ Cache limpo com sucesso")
+
+def convert_text_score_to_number(text_score):
+    """Converte respostas em texto para números"""
+    if pd.isna(text_score) or text_score == "":
+        return np.nan
+    
+    text_score = str(text_score).lower().strip()
+    
+    # Mapeamento de respostas textuais
+    text_mappings = {
+        'excelente': 10,
+        'ótimo': 9,
+        'muito bom': 8,
+        'bom': 7,
+        'regular': 6,
+        'ruim': 4,
+        'péssimo': 2,
+        'muito ruim': 3,
+        'satisfeito': 8,
+        'muito satisfeito': 9,
+        'insatisfeito': 4,
+        'muito insatisfeito': 2
+    }
+    
+    # Procurar por mapeamentos textuais
+    for key, value in text_mappings.items():
+        if key in text_score:
+            return value
+    
+    # Procurar por números na string
+    numbers = re.findall(r'\d+', text_score)
+    if numbers:
+        try:
+            return float(numbers[0])
+        except ValueError:
+            pass
+    
+    return np.nan
+
+def categorize_nps_from_text(text_score):
+    """Categoriza respostas de NPS em texto"""
+    if pd.isna(text_score) or text_score == "":
+        return "Sem resposta"
+    
+    text_score = str(text_score).lower().strip()
+    
+    # Padrões para promotores
+    promoter_patterns = [
+        'entre 9 e 10', '9-10', 'promotor', 
+        'muito provável', 'certamente', 'definitivamente'
+    ]
+    
+    # Padrões para neutros
+    neutral_patterns = [
+        'entre 7 e 8', '7-8', 'neutro',
+        'talvez', 'possivelmente', 'pode ser'
+    ]
+    
+    # Padrões para detratores
+    detractor_patterns = [
+        'entre 0 e 6', '0-6', 'detrator', 'entre 1 e 6',
+        'improvável', 'nunca', 'jamais', 'não recomendo'
+    ]
+    
+    # Classificar baseado nos padrões
+    if any(pattern in text_score for pattern in promoter_patterns):
+        return "Promotor"
+    elif any(pattern in text_score for pattern in neutral_patterns):
+        return "Neutro"
+    elif any(pattern in text_score for pattern in detractor_patterns):
+        return "Detrator"
+    
+    # Tentar extrair número se for formato numérico direto
+    numbers = re.findall(r'\d+', text_score)
+    if numbers:
+        try:
+            score = int(numbers[0])
+            if score >= 9:
+                return "Promotor"
+            elif score >= 7:
+                return "Neutro"
+            elif score >= 0:
+                return "Detrator"
+        except ValueError:
+            pass
+    
+    return "Indefinido"
+
+def load_actions_log():
+    """Carrega log de ações (para compatibilidade com o Streamlit)"""
+    actions_file = "cs_actions_log.json"
+    if os.path.exists(actions_file):
+        try:
+            with open(actions_file, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except Exception as e:
+            print(f"Erro ao carregar actions log: {str(e)}")
+            return []
+    return []
+
+def save_action_log(action_data):
+    """Salva ação no log"""
+    actions_file = "cs_actions_log.json"
+    actions = load_actions_log()
+    action_data['timestamp'] = datetime.now().isoformat()
+    actions.append(action_data)
+    
+    try:
+        with open(actions_file, 'w', encoding='utf-8') as f:
+            json.dump(actions, f, ensure_ascii=False, indent=2)
+        print(f"✅ Ação salva: {action_data.get('action_type', 'N/A')}")
+    except Exception as e:
+        print(f"❌ Erro ao salvar ação: {str(e)}")
+
+# Função para compatibilidade com chamadas do template
+def calculate_satisfaction_metrics(df_satisfacao: pd.DataFrame, column_name: str, 
+                                 is_nps: bool = False, data_inicio=None, data_fim=None) -> Dict:
+    """Calcula métricas de satisfação com comparação temporal"""
+    if df_satisfacao.empty or column_name not in df_satisfacao.columns:
+        return {
+            'value': 'N/A',
+            'trend': 'Coluna não encontrada' if column_name else 'Sem dados',
+            'color_class': 'info',
+            'details': {}
+        }
+    
+    # Usar período padrão se não especificado
+    if not data_inicio or not data_fim:
+        data_fim = datetime.now()
+        data_inicio = data_fim - timedelta(days=30)
+    
+    # Buscar coluna de data
+    date_column = None
+    for col in df_satisfacao.columns:
+        if any(x in col.lower() for x in ['carimbo', 'data', 'timestamp', 'time']):
+            date_column = col
+            break
+    
+    if date_column and date_column in df_satisfacao.columns:
+        # Filtrar por período
+        df_work = df_satisfacao.copy()
+        df_work[date_column] = pd.to_datetime(df_work[date_column], errors='coerce')
+        
+        # Período atual
+        mask_atual = (df_work[date_column] >= data_inicio) & (df_work[date_column] <= data_fim)
+        respostas_atual = df_work[mask_atual][column_name].dropna()
+        
+        # Período anterior (mesmo tamanho)
+        periodo_anterior_inicio = data_inicio - (data_fim - data_inicio)
+        mask_anterior = (df_work[date_column] >= periodo_anterior_inicio) & (df_work[date_column] < data_inicio)
+        respostas_anterior = df_work[mask_anterior][column_name].dropna()
+    else:
+        # Sem filtro de data, usar todos os dados
+        respostas_atual = df_satisfacao[column_name].dropna()
+        respostas_anterior = pd.Series(dtype=object)
+    
+    if len(respostas_atual) == 0:
+        return {
+            'value': 'N/A',
+            'trend': 'Sem respostas no período',
+            'color_class': 'info',
+            'details': {}
+        }
+    
+    if is_nps:
+        # Lógica específica para NPS
+        nps_categories = respostas_atual.apply(categorize_nps_from_text)
+        
+        promoters = len(nps_categories[nps_categories == 'Promotor'])
+        detractors = len(nps_categories[nps_categories == 'Detrator'])
+        total_valid = len(nps_categories[nps_categories != 'Indefinido'])
+        
+        if total_valid == 0:
+            nps_score = 0
+        else:
+            nps_score = ((promoters - detractors) / total_valid) * 100
+        
+        # Comparação com período anterior se disponível
+        if len(respostas_anterior) > 0:
+            nps_anterior = respostas_anterior.apply(categorize_nps_from_text)
+            promoters_ant = len(nps_anterior[nps_anterior == 'Promotor'])
+            detractors_ant = len(nps_anterior[nps_anterior == 'Detrator'])
+            total_ant = len(nps_anterior[nps_anterior != 'Indefinido'])
+            
+            if total_ant > 0:
+                nps_anterior_score = ((promoters_ant - detractors_ant) / total_ant) * 100
+                diferenca = nps_score - nps_anterior_score
+                
+                if diferenca > 5:
+                    trend = f"↗️ +{diferenca:.1f} vs anterior"
+                    color_class = "success"
+                elif diferenca < -5:
+                    trend = f"↘️ {diferenca:.1f} vs anterior"
+                    color_class = "danger"
+                else:
+                    trend = f"➡️ {diferenca:+.1f} vs anterior"
+                    color_class = "success" if nps_score >= 50 else "warning" if nps_score >= 0 else "danger"
+            else:
+                trend = f"{total_valid} avaliações"
+                color_class = "success" if nps_score >= 50 else "warning" if nps_score >= 0 else "danger"
+        else:
+            trend = f"{total_valid} avaliações"
+            color_class = "success" if nps_score >= 50 else "warning" if nps_score >= 0 else "danger"
+        
+        return {
+            'value': f"{nps_score:.0f}",
+            'trend': trend,
+            'color_class': color_class,
+            'details': {
+                'nps_score': nps_score,
+                'promoters': promoters,
+                'detractors': detractors,
+                'total_respostas': total_valid
+            }
+        }
+    else:
+        # Métricas normais (produto, atendimento, prazo)
+        scores_atual = respostas_atual.apply(convert_text_score_to_number).dropna()
+        
+        if len(scores_atual) == 0:
+            return {
+                'value': 'N/A',
+                'trend': 'Erro na conversão',
+                'color_class': 'info',
+                'details': {}
+            }
+        
+        valor_atual = scores_atual.mean()
+        
+        # Calcular período anterior se houver dados
+        if len(respostas_anterior) > 0:
+            scores_anterior = respostas_anterior.apply(convert_text_score_to_number).dropna()
+            
+            if len(scores_anterior) > 0:
+                valor_anterior = scores_anterior.mean()
+                diferenca = valor_atual - valor_anterior
+                
+                if diferenca > 0.3:
+                    trend = f"↗️ +{diferenca:.1f} vs anterior"
+                    color_class = "success"
+                elif diferenca < -0.3:
+                    trend = f"↘️ {diferenca:.1f} vs anterior"
+                    color_class = "danger"
+                else:
+                    trend = f"➡️ {diferenca:+.1f} vs anterior"
+                    color_class = "success" if valor_atual >= 8 else "warning" if valor_atual >= 6 else "danger"
+            else:
+                trend = f"{len(respostas_atual)} avaliações"
+                color_class = "success" if valor_atual >= 8 else "warning" if valor_atual >= 6 else "danger"
+        else:
+            trend = f"{len(respostas_atual)} avaliações"
+            color_class = "success" if valor_atual >= 8 else "warning" if valor_atual >= 6 else "danger"
+        
+        return {
+            'value': f"{valor_atual:.1f}/10",
+            'trend': trend,
+            'color_class': color_class,
+            'details': {
+                'valor_medio': valor_atual,
+                'total_respostas': len(respostas_atual)
+            }
+        }
