@@ -1,16 +1,16 @@
 from flask import Flask, render_template, jsonify, request
 from datetime import datetime, timedelta
 import json
-import pandas as pd  # ← ESTA IMPORTAÇÃO ESTAVA FALTANDO
+import pandas as pd  # ← ADICIONAR ESTA LINHA
 from config import Config
 from data_utils import (
     get_executive_summary_data, 
     load_google_sheet_public,
-    load_satisfaction_data,  # ← ESTA IMPORTAÇÃO ESTAVA FALTANDO
-    calculate_priority_score,  # ← ESTA IMPORTAÇÃO ESTAVA FALTANDO
+    load_satisfaction_data,     # ← ADICIONAR ESTA LINHA
+    calculate_priority_score,   # ← ADICIONAR ESTA LINHA  
+    analyze_client_recurrence,  # ← ADICIONAR ESTA LINHA
     format_number,
-    format_phone_number,
-    analyze_client_recurrence  # ← ESTA IMPORTAÇÃO ESTAVA FALTANDO
+    format_phone_number
 )
 
 app = Flask(__name__)

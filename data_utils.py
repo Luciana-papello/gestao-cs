@@ -150,56 +150,32 @@ def categorize_nps_from_text(text_score) -> str:
     return "Indefinido"
 
 def calculate_priority_score(row) -> float:
-    """Calcula score de prioridade para ordenação de clientes"""
+    """Calcula score de prioridade para ordenação - VERSÃO CORRIGIDA"""
     try:
-        # Pesos para níveis de cliente
-        priority_weights = {
-            'Premium': 100, 
-            'Gold': 80, 
-            'Silver': 60, 
-            'Bronze': 40
-        }
-        
-        # Pesos para status de churn
+        priority_weights = {'Premium': 100, 'Gold': 80, 'Silver': 60, 'Bronze': 40}
         churn_weights = {
-            'Dormant_Premium': 300, 
-            'Dormant_Gold': 250, 
-            'Dormant_Silver': 200,
-            'Dormant_Bronze': 150, 
-            'Dormant_Novo': 120, 
-            'Inativo': 100, 
-            'Ativo': 0
+            'Dormant_Premium': 300, 'Dormant_Gold': 250, 'Dormant_Silver': 200,
+            'Dormant_Bronze': 150, 'Dormant_Novo': 120, 'Inativo': 100, 'Ativo': 0
         }
-        
-        # Pesos para risco de recência
         risk_weights = {
-            'Novo_Alto': 80, 
-            'Alto': 50, 
-            'Novo_Médio': 40,
-            'Médio': 30, 
-            'Novo_Baixo': 20, 
-            'Baixo': 10
+            'Novo_Alto': 80, 'Alto': 50, 'Novo_Médio': 40,
+            'Médio': 30, 'Novo_Baixo': 20, 'Baixo': 10
         }
         
-        # Extrair valores da linha (usando .get() para evitar KeyError)
         nivel = row.get('nivel_cliente', 'Bronze')
         risco = row.get('risco_recencia', 'Baixo')
         churn = row.get('status_churn', 'Ativo')
         top20 = 1 if row.get('top_20_valor', 'Não') == 'Sim' else 0
         
-        # Calcular score final
-        score = (
+        return float(
             priority_weights.get(nivel, 40) + 
             risk_weights.get(risco, 10) + 
             churn_weights.get(churn, 0) + 
             top20 * 25
         )
         
-        return float(score)
-        
     except Exception as e:
         print(f"Erro ao calcular priority score: {str(e)}")
-        return 0.0
 
 def calculate_satisfaction_metrics(df_satisfacao: pd.DataFrame, column_name: str, 
                                  is_nps: bool = False, data_inicio=None, data_fim=None) -> Dict:
@@ -366,7 +342,7 @@ def calculate_satisfaction_metrics(df_satisfacao: pd.DataFrame, column_name: str
         }
 
 def analyze_client_recurrence(df_pedidos: pd.DataFrame, data_inicio=None, data_fim=None) -> Dict:
-    """Analisa recorrência de clientes baseado nos pedidos"""
+    """Analisa recorrência de clientes baseado nos pedidos - VERSÃO COMPLETA"""
     if df_pedidos.empty:
         return {}
     
@@ -426,7 +402,7 @@ def analyze_client_recurrence(df_pedidos: pd.DataFrame, data_inicio=None, data_f
         
         clientes_unicos = df_valid['cliente_unico_id'].nunique()
         
-        # Taxa de conversão (clientes que fizeram primeira compra E recompra)
+        # Taxa de conversão
         taxa_conversao = 0
         if clientes_unicos > 0 and pedidos_primeira_compra > 0:
             try:
@@ -436,7 +412,6 @@ def analyze_client_recurrence(df_pedidos: pd.DataFrame, data_inicio=None, data_f
                 df_recompra = df_valid[df_valid['status_pedido_clean'].str.contains('|'.join(recompra_variations), na=False)]
                 clientes_recompra = set(df_recompra['cliente_unico_id'])
                 
-                # Clientes que aparecem em ambos os conjuntos
                 clientes_convertidos = len(clientes_primeira.intersection(clientes_recompra))
                 taxa_conversao = (clientes_convertidos / len(clientes_primeira)) * 100 if len(clientes_primeira) > 0 else 0
             except Exception as e:
@@ -445,7 +420,6 @@ def analyze_client_recurrence(df_pedidos: pd.DataFrame, data_inicio=None, data_f
         
         # Tickets médios
         try:
-            # Limpar e converter valores
             df_valid['valor_numerico'] = pd.to_numeric(
                 df_valid['valor_do_pedido'].astype(str).str.replace(',', '.').str.replace(r'[^\d.]', '', regex=True), 
                 errors='coerce'
@@ -509,8 +483,10 @@ def get_latest_update_date(df_pedidos: pd.DataFrame) -> str:
     except Exception as e:
         return "N/A"
 
+# === ADICIONAR ESTAS FUNÇÕES NO FINAL DO data_utils.py ===
+
 def get_executive_summary_data() -> Dict:
-    """Carrega todos os dados necessários para a Visão Executiva"""
+    """Carrega todos os dados necessários para a Visão Executiva - VERSÃO COMPLETA"""
     try:
         # Carregar dados das planilhas
         df_clientes = load_google_sheet_public(Config.CLASSIFICACAO_SHEET_ID, "classificacao_clientes3")
@@ -523,14 +499,12 @@ def get_executive_summary_data() -> Dict:
         # Processar dados dos clientes
         df_clientes = df_clientes.copy()
         df_clientes['priority_score'] = df_clientes.apply(calculate_priority_score, axis=1)
-        
-        # Converter receita para numérico (replicando lógica do dash3.py)
         df_clientes['receita_num'] = pd.to_numeric(
             df_clientes['receita'].str.replace(',', '.'), 
             errors='coerce'
         ).fillna(0)
         
-        # KPIs principais (exatamente como no dash3.py)
+        # KPIs principais
         total_clientes = len(df_clientes)
         clientes_ativos = len(df_clientes[df_clientes['status_churn'] == 'Ativo'])
         clientes_criticos = len(df_clientes[df_clientes['priority_score'] >= 200])
@@ -594,7 +568,7 @@ def get_executive_summary_data() -> Dict:
             (df_clientes['risco_recencia'].isin(['Alto', 'Novo_Alto', 'Médio', 'Novo_Médio']))
         ]
         
-        # Retornar dados estruturados
+        # RETORNO COMPLETO
         return {
             'kpis': {
                 'total_clientes': total_clientes,
@@ -623,27 +597,7 @@ def get_executive_summary_data() -> Dict:
         print(f"Erro ao carregar dados executivos: {str(e)}")
         return {'error': f'Erro ao processar dados: {str(e)}'}
     
-def calculate_priority_score(row):
-    """Calcula score de prioridade para ordenação"""
-    priority_weights = {'Premium': 100, 'Gold': 80, 'Silver': 60, 'Bronze': 40}
-    churn_weights = {
-        'Dormant_Premium': 300, 'Dormant_Gold': 250, 'Dormant_Silver': 200,
-        'Dormant_Bronze': 150, 'Dormant_Novo': 120, 'Inativo': 100, 'Ativo': 0
-    }
-    risk_weights = {
-        'Novo_Alto': 80, 'Alto': 50, 'Novo_Médio': 40,
-        'Médio': 30, 'Novo_Baixo': 20, 'Baixo': 10
-    }
-    
-    nivel = row.get('nivel_cliente', 'Bronze')
-    risco = row.get('risco_recencia', 'Baixo') 
-    churn = row.get('status_churn', 'Ativo')
-    top20 = 1 if row.get('top_20_valor', 'Não') == 'Sim' else 0
-    
-    return (priority_weights.get(nivel, 0) + 
-            risk_weights.get(risco, 0) + 
-            churn_weights.get(churn, 0) + 
-            top20 * 25)
+
 def format_number(value, prefix="", suffix=""):
     """Formata números para exibição"""
     if pd.isna(value) or value == 0:
@@ -666,12 +620,7 @@ def format_phone_number(phone):
         phone_str = phone_str[:-2]
     
     return phone_str
-def clear_cache():
-    """Limpa o cache interno"""
-    global _cache, _cache_timestamps
-    _cache.clear()
-    _cache_timestamps.clear()
-    print("✅ Cache limpo com sucesso")
+
 
 def convert_text_score_to_number(text_score):
     """Converte respostas em texto para números"""
@@ -934,3 +883,9 @@ def calculate_satisfaction_metrics(df_satisfacao: pd.DataFrame, column_name: str
                 'total_respostas': len(respostas_atual)
             }
         }
+def clear_cache():
+    """Limpa o cache interno"""
+    global _cache, _cache_timestamps
+    _cache.clear()
+    _cache_timestamps.clear()
+    print("✅ Cache limpo com sucesso")
