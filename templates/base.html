@@ -14,9 +14,6 @@
     <!-- Font Awesome Icons -->
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     
-    <!-- Chart.js -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.min.js"></script>
-    
     <!-- CSS Customizado Papello -->
     <link href="{{ url_for('static', filename='css/papello.css') }}" rel="stylesheet">
     
@@ -128,24 +125,62 @@
         </div>
     </footer>
     
-    <!-- Scripts -->
-    <!-- Bootstrap JS -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    
-    <!-- jQuery -->
+    <!-- Scripts - ORDEM CORRIGIDA -->
+    <!-- 1. jQuery primeiro -->
     <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
     
-    <!-- Scripts customizados -->
-    <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/charts.js') }}"></script>
+    <!-- 2. Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <!-- 3. Chart.js - AGUARDAR CARREGAMENTO -->
+    <script>
+        window.chartJsLoaded = false;
+        window.chartJsLoadPromise = new Promise((resolve) => {
+            const script = document.createElement('script');
+            script.src = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.min.js';
+            script.onload = () => {
+                window.chartJsLoaded = true;
+                console.log('✅ Chart.js carregado com sucesso');
+                resolve();
+            };
+            script.onerror = () => {
+                console.error('❌ Falha ao carregar Chart.js');
+                resolve(); // Resolve mesmo com erro para não travar
+            };
+            document.head.appendChild(script);
+        });
+    </script>
+    
+    <!-- 4. Scripts customizados - APÓS Chart.js -->
+    <script>
+        // Aguardar Chart.js carregar antes de carregar nossos scripts
+        window.chartJsLoadPromise.then(() => {
+            // Carregar charts.js
+            const chartsScript = document.createElement('script');
+            chartsScript.src = "{{ url_for('static', filename='js/charts.js') }}";
+            chartsScript.onload = () => console.log('✅ charts.js carregado');
+            document.head.appendChild(chartsScript);
+            
+            // Carregar dashboard.js
+            const dashboardScript = document.createElement('script');
+            dashboardScript.src = "{{ url_for('static', filename='js/dashboard.js') }}";
+            dashboardScript.onload = () => console.log('✅ dashboard.js carregado');
+            document.head.appendChild(dashboardScript);
+        });
+    </script>
     
     {% block extra_scripts %}{% endblock %}
     
-    <!-- Inicialização -->
+    <!-- Inicialização - SÓ APÓS TUDO CARREGAR -->
     <script>
         $(document).ready(function() {
-            initializeDashboard();
-            {% block page_init %}{% endblock %}
+            // Aguardar um pouco para garantir que tudo carregou
+            setTimeout(() => {
+                if (typeof initializeDashboard === 'function') {
+                    initializeDashboard();
+                }
+                {% block page_init %}{% endblock %}
+            }, 500);
         });
     </script>
 </body>

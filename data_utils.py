@@ -342,22 +342,25 @@ def calculate_satisfaction_metrics(df_satisfacao: pd.DataFrame, column_name: str
         }
 
 def analyze_client_recurrence(df_pedidos: pd.DataFrame, data_inicio=None, data_fim=None) -> Dict:
-    """
-    Analisa a recorrência de clientes.
-    A conversão de datas é feita aqui dentro, exatamente como no script original dash3.py.
-    """
+    """Analisa a recorrência de clientes com correção explícita do formato da data."""
     if df_pedidos.empty:
         return {}
     
     try:
         df_work = df_pedidos.copy()
         
-        # --- PONTO CHAVE: LÓGICA DE CONVERSÃO DE DATA IGUAL AO dash3.py ---
-        df_work['data_pedido_realizado'] = pd.to_datetime(df_work['data_pedido_realizado'], errors='coerce')
+        # --- CORREÇÃO DEFINITIVA ---
+        # Força o pandas a ler as datas no formato ano-mês-dia, removendo a ambiguidade.
+        df_work['data_pedido_realizado'] = pd.to_datetime(
+            df_work['data_pedido_realizado'], 
+            format='%Y-%m-%d %H:%M:%S', 
+            errors='coerce'
+        )
         df_valid = df_work.dropna(subset=['data_pedido_realizado']).copy()
-        # --- FIM DA LÓGICA CRÍTICA ---
+        # --- FIM DA CORREÇÃO ---
 
         if df_valid.empty:
+            print("AVISO: Nenhuma data válida encontrada após a conversão.")
             return {}
 
         if data_inicio and data_fim:
@@ -367,6 +370,7 @@ def analyze_client_recurrence(df_pedidos: pd.DataFrame, data_inicio=None, data_f
             ]
 
         if df_valid.empty:
+            print(f"AVISO: Nenhum pedido encontrado no período de {data_inicio.strftime('%d/%m/%Y')} a {data_fim.strftime('%d/%m/%Y')}.")
             return {}
 
         df_valid['status_pedido_clean'] = df_valid['status_pedido'].astype(str).str.strip().str.lower()
@@ -388,8 +392,8 @@ def analyze_client_recurrence(df_pedidos: pd.DataFrame, data_inicio=None, data_f
         taxa_conversao = 0.0
         clientes_primeira = set(df_primeira['cliente_unico_id'])
         if len(clientes_primeira) > 0:
-            clientes_recompra = set(df_recompra['cliente_unico_id'])
-            clientes_convertidos = len(clientes_primeira.intersection(clientes_recompra))
+            clientes_recompra_set = set(df_recompra['cliente_unico_id'])
+            clientes_convertidos = len(clientes_primeira.intersection(clientes_recompra_set))
             taxa_conversao = (clientes_convertidos / len(clientes_primeira)) * 100
 
         return {
@@ -402,6 +406,8 @@ def analyze_client_recurrence(df_pedidos: pd.DataFrame, data_inicio=None, data_f
 
     except Exception as e:
         print(f"ERRO em analyze_client_recurrence: {e}")
+        import traceback
+        traceback.print_exc()
         return {}
 
 def get_latest_update_date(df_pedidos: pd.DataFrame) -> str:

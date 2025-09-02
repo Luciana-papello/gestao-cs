@@ -1,9 +1,14 @@
-// Dashboard Papello - Gráficos com Chart.js
+// Dashboard Papello - Gráficos com Chart.js (VERSÃO CORRIGIDA)
 
-// Configurações globais dos gráficos
-Chart.defaults.font.family = 'Inter, sans-serif';
-Chart.defaults.font.size = 12;
-Chart.defaults.color = '#6b7280';
+// Aguardar o Chart.js estar disponível
+document.addEventListener('DOMContentLoaded', function() {
+    // Configurações globais dos gráficos
+    if (typeof Chart !== 'undefined') {
+        Chart.defaults.font.family = 'Inter, sans-serif';
+        Chart.defaults.font.size = 12;
+        Chart.defaults.color = '#6b7280';
+    }
+});
 
 // Cores Papello
 const CHART_COLORS = {
@@ -49,12 +54,12 @@ function updateDistributionCharts(distributions) {
     
     // Gráfico de nível
     if (distributions.nivel) {
-        createNivelPieChart(distributions.nivel);
+        updateNivelChart(distributions.nivel);
     }
     
     // Gráfico de risco
     if (distributions.risco) {
-        createRiscoBarChart(distributions.risco);
+        updateRiscoChart(distributions.risco);
     }
 }
 
@@ -63,18 +68,18 @@ function updateRecurrenceCharts(chartsData) {
     
     // Gráfico de pizza da recorrência
     if (chartsData.pie_recurrence) {
-        createRecurrencePieChart(chartsData.pie_recurrence);
+        updateRecurrencePieChart(chartsData.pie_recurrence);
     }
     
     // Gráfico de barras dos tickets
     if (chartsData.bar_tickets) {
-        createTicketsBarChart(chartsData.bar_tickets);
+        updateTicketsBarChart(chartsData.bar_tickets);
     }
 }
 
-// === GRÁFICOS ESPECÍFICOS ===
+// === IMPLEMENTAÇÕES DOS GRÁFICOS ===
 
-function createNivelPieChart(data) {
+function updateNivelChart(data) {
     const ctx = document.getElementById('chart-nivel-pie');
     if (!ctx) return;
     
@@ -138,7 +143,7 @@ function createNivelPieChart(data) {
     });
 }
 
-function createRiscoBarChart(data) {
+function updateRiscoChart(data) {
     const ctx = document.getElementById('chart-risco-bar');
     if (!ctx) return;
     
@@ -224,7 +229,7 @@ function createRiscoBarChart(data) {
     });
 }
 
-function createRecurrencePieChart(data) {
+function updateRecurrencePieChart(data) {
     const ctx = document.getElementById('chart-recurrence-pie');
     if (!ctx) return;
     
@@ -292,7 +297,7 @@ function createRecurrencePieChart(data) {
     });
 }
 
-function createTicketsBarChart(data) {
+function updateTicketsBarChart(data) {
     const ctx = document.getElementById('chart-tickets-bar');
     if (!ctx) return;
     
@@ -388,69 +393,6 @@ function createTicketsBarChart(data) {
     });
 }
 
-// === GRÁFICOS DE SATISFAÇÃO ===
-
-function createNPSGaugeChart(npsValue) {
-    const ctx = document.getElementById('chart-nps-gauge');
-    if (!ctx) return;
-    
-    // Destruir gráfico existente
-    if (charts.npsGauge) {
-        charts.npsGauge.destroy();
-    }
-    
-    // Determinar cor baseada no valor do NPS
-    let color = CHART_COLORS.danger;
-    if (npsValue >= 50) color = CHART_COLORS.success;
-    else if (npsValue >= 0) color = CHART_COLORS.warning;
-    
-    charts.npsGauge = new Chart(ctx, {
-        type: 'doughnut',
-        data: {
-            datasets: [{
-                data: [Math.max(0, npsValue + 100), Math.max(0, 100 - (npsValue + 100))],
-                backgroundColor: [color, 'rgba(0,0,0,0.1)'],
-                borderWidth: 0,
-                circumference: 180,
-                rotation: 270
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: {
-                    display: false
-                },
-                tooltip: {
-                    enabled: false
-                }
-            },
-            cutout: '75%'
-        },
-        plugins: [{
-            beforeDraw: function(chart) {
-                const width = chart.width;
-                const height = chart.height;
-                const ctx = chart.ctx;
-                
-                ctx.restore();
-                const fontSize = (height / 100).toFixed(2);
-                ctx.font = `${fontSize}em Inter, sans-serif`;
-                ctx.textBaseline = 'middle';
-                ctx.fillStyle = color;
-                
-                const text = npsValue.toFixed(0);
-                const textX = Math.round((width - ctx.measureText(text).width) / 2);
-                const textY = height / 1.4;
-                
-                ctx.fillText(text, textX, textY);
-                ctx.save();
-            }
-        }]
-    });
-}
-
 // === UTILITÁRIOS ===
 
 function showNoDataMessage(canvas, message) {
@@ -474,40 +416,14 @@ function destroyAllCharts() {
     charts = {};
 }
 
-// === CONFIGURAÇÕES RESPONSIVAS ===
-
-function updateChartsResponsive() {
+// Event listener para redimensionamento
+window.addEventListener('resize', function() {
     Object.values(charts).forEach(chart => {
         if (chart && typeof chart.resize === 'function') {
             chart.resize();
         }
     });
-}
-
-// Event listener para redimensionamento
-window.addEventListener('resize', debounce(updateChartsResponsive, 300));
-
-// Função debounce para otimizar performance
-function debounce(func, wait) {
-    let timeout;
-    return function executedFunction(...args) {
-        const later = () => {
-            clearTimeout(timeout);
-            func(...args);
-        };
-        clearTimeout(timeout);
-        timeout = setTimeout(later, wait);
-    };
-}
-
-// === EXPORTAR FUNÇÕES ===
-window.chartsPapello = {
-    updateDistributions: updateDistributionCharts,
-    updateRecurrence: updateRecurrenceCharts,
-    createNPSGauge: createNPSGaugeChart,
-    destroyAll: destroyAllCharts,
-    updateResponsive: updateChartsResponsive
-};
+});
 
 // Limpar gráficos ao descarregar página
 window.addEventListener('beforeunload', destroyAllCharts);
