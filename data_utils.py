@@ -25,12 +25,13 @@ def set_cache(key: str, data):
     _cache_timestamps[key] = datetime.now()
 
 def load_google_sheet_public(sheet_id: str, tab_name: str = None) -> pd.DataFrame:
-    """Carrega planilha pública do Google Sheets com cache"""
+    """Carrega planilha pública do Google Sheets com cache e correção de data."""
     cache_key = f"{sheet_id}_{tab_name}"
     cached_data = get_from_cache(cache_key, Config.CACHE_TIMEOUT)
     
     if cached_data is not None:
-        return cached_data
+        # Retorna uma cópia para evitar modificações no cache
+        return cached_data.copy()
     
     try:
         if tab_name:
@@ -41,11 +42,19 @@ def load_google_sheet_public(sheet_id: str, tab_name: str = None) -> pd.DataFram
         df = pd.read_csv(url)
         df.columns = df.columns.str.strip()
         
+        # --- LINHA CRÍTICA DA CORREÇÃO ---
+        # Verifica se a coluna de data existe e a converte para o formato datetime correto
+        if 'data_pedido_realizado' in df.columns:
+            print("INFO: Convertendo a coluna 'data_pedido_realizado' para datetime...")
+            df['data_pedido_realizado'] = pd.to_datetime(df['data_pedido_realizado'], dayfirst=True, errors='coerce')
+            print("INFO: Conversão de data concluída.")
+
         set_cache(cache_key, df)
-        return df
+        # Retorna uma cópia para o uso
+        return df.copy()
         
     except Exception as e:
-        print(f"Erro ao carregar planilha {tab_name}: {str(e)}")
+        print(f"ERRO: Falha ao carregar a planilha '{tab_name}': {str(e)}")
         return pd.DataFrame()
 
 def load_satisfaction_data() -> pd.DataFrame:
@@ -61,7 +70,6 @@ def load_satisfaction_data() -> pd.DataFrame:
         df = pd.read_csv(url)
         df.columns = df.columns.str.strip()
         
-        # Forçar formato brasileiro DD/MM/YYYY
         date_cols = [col for col in df.columns if any(x in col.lower() for x in ['carimbo', 'data', 'timestamp'])]
         
         for col in date_cols:
@@ -150,7 +158,6 @@ def categorize_nps_from_text(text_score) -> str:
     return "Indefinido"
 
 def calculate_priority_score(row) -> float:
-    """Calcula score de prioridade para ordenação - VERSÃO CORRIGIDA"""
     try:
         priority_weights = {'Premium': 100, 'Gold': 80, 'Silver': 60, 'Bronze': 40}
         churn_weights = {
@@ -161,21 +168,14 @@ def calculate_priority_score(row) -> float:
             'Novo_Alto': 80, 'Alto': 50, 'Novo_Médio': 40,
             'Médio': 30, 'Novo_Baixo': 20, 'Baixo': 10
         }
-        
         nivel = row.get('nivel_cliente', 'Bronze')
         risco = row.get('risco_recencia', 'Baixo')
         churn = row.get('status_churn', 'Ativo')
         top20 = 1 if row.get('top_20_valor', 'Não') == 'Sim' else 0
-        
-        return float(
-            priority_weights.get(nivel, 40) + 
-            risk_weights.get(risco, 10) + 
-            churn_weights.get(churn, 0) + 
-            top20 * 25
-        )
-        
-    except Exception as e:
-        print(f"Erro ao calcular priority score: {str(e)}")
+        return float(priority_weights.get(nivel, 40) + risk_weights.get(risco, 10) + churn_weights.get(churn, 0) + top20 * 25)
+    except:
+        return 0
+
 
 def calculate_satisfaction_metrics(df_satisfacao: pd.DataFrame, column_name: str, 
                                  is_nps: bool = False, data_inicio=None, data_fim=None) -> Dict:
@@ -342,118 +342,66 @@ def calculate_satisfaction_metrics(df_satisfacao: pd.DataFrame, column_name: str
         }
 
 def analyze_client_recurrence(df_pedidos: pd.DataFrame, data_inicio=None, data_fim=None) -> Dict:
-    """Analisa recorrência de clientes baseado nos pedidos - VERSÃO COMPLETA"""
+    """
+    Analisa a recorrência de clientes.
+    A conversão de datas é feita aqui dentro, exatamente como no script original dash3.py.
+    """
     if df_pedidos.empty:
         return {}
     
     try:
-        required_cols = ['data_pedido_realizado', 'status_pedido', 'cliente_unico_id', 'valor_do_pedido']
-        missing_cols = [col for col in required_cols if col not in df_pedidos.columns]
-        
-        if missing_cols:
-            print(f"Colunas em falta para análise de recorrência: {missing_cols}")
-            return {}
-        
         df_work = df_pedidos.copy()
+        
+        # --- PONTO CHAVE: LÓGICA DE CONVERSÃO DE DATA IGUAL AO dash3.py ---
         df_work['data_pedido_realizado'] = pd.to_datetime(df_work['data_pedido_realizado'], errors='coerce')
         df_valid = df_work.dropna(subset=['data_pedido_realizado']).copy()
-        
-        if len(df_valid) == 0:
+        # --- FIM DA LÓGICA CRÍTICA ---
+
+        if df_valid.empty:
             return {}
-        
-        # Aplicar filtro de data se fornecido
+
         if data_inicio and data_fim:
-            if isinstance(data_inicio, str):
-                data_inicio = pd.to_datetime(data_inicio)
-            if isinstance(data_fim, str):
-                data_fim = pd.to_datetime(data_fim)
-            
             df_valid = df_valid[
-                (df_valid['data_pedido_realizado'] >= data_inicio) & 
+                (df_valid['data_pedido_realizado'] >= data_inicio) &
                 (df_valid['data_pedido_realizado'] <= data_fim)
             ]
-        
-        if len(df_valid) == 0:
+
+        if df_valid.empty:
             return {}
-        
-        # Calcular métricas
-        total_pedidos = len(df_valid)
+
         df_valid['status_pedido_clean'] = df_valid['status_pedido'].astype(str).str.strip().str.lower()
         
-        # Buscar variações dos valores
-        primeira_variations = ['primeiro', 'primeira', 'first', 'nova', 'novo']
-        recompra_variations = ['recompra', 'repeat', 'recorrente', 'retorno']
+        df_primeira = df_valid[df_valid['status_pedido_clean'] == 'primeiro']
+        df_recompra = df_valid[df_valid['status_pedido_clean'] == 'recompra']
+
+        pedidos_primeira_compra = len(df_primeira)
+        pedidos_recompra = len(df_recompra)
         
-        pedidos_primeira_compra = 0
-        pedidos_recompra = 0
+        df_valid['valor_numerico'] = pd.to_numeric(
+            df_valid['valor_do_pedido'].astype(str).str.replace(',', '.').str.replace(r'[^\d.]', '', regex=True),
+            errors='coerce'
+        ).fillna(0)
+
+        ticket_primeira = df_primeira['valor_numerico'].mean() if pedidos_primeira_compra > 0 else 0.0
+        ticket_recompra = df_recompra['valor_numerico'].mean() if pedidos_recompra > 0 else 0.0
         
-        # Contar pedidos por tipo
-        for variation in primeira_variations:
-            count = len(df_valid[df_valid['status_pedido_clean'].str.contains(variation, na=False)])
-            if count > 0:
-                pedidos_primeira_compra = count
-                break
-        
-        for variation in recompra_variations:
-            count = len(df_valid[df_valid['status_pedido_clean'].str.contains(variation, na=False)])
-            if count > 0:
-                pedidos_recompra = count
-                break
-        
-        clientes_unicos = df_valid['cliente_unico_id'].nunique()
-        
-        # Taxa de conversão
-        taxa_conversao = 0
-        if clientes_unicos > 0 and pedidos_primeira_compra > 0:
-            try:
-                df_primeira = df_valid[df_valid['status_pedido_clean'].str.contains('|'.join(primeira_variations), na=False)]
-                clientes_primeira = set(df_primeira['cliente_unico_id'])
-                
-                df_recompra = df_valid[df_valid['status_pedido_clean'].str.contains('|'.join(recompra_variations), na=False)]
-                clientes_recompra = set(df_recompra['cliente_unico_id'])
-                
-                clientes_convertidos = len(clientes_primeira.intersection(clientes_recompra))
-                taxa_conversao = (clientes_convertidos / len(clientes_primeira)) * 100 if len(clientes_primeira) > 0 else 0
-            except Exception as e:
-                print(f"Erro ao calcular taxa de conversão: {str(e)}")
-                taxa_conversao = 0
-        
-        # Tickets médios
-        try:
-            df_valid['valor_numerico'] = pd.to_numeric(
-                df_valid['valor_do_pedido'].astype(str).str.replace(',', '.').str.replace(r'[^\d.]', '', regex=True), 
-                errors='coerce'
-            ).fillna(0)
-        except:
-            df_valid['valor_numerico'] = 0
-        
-        ticket_primeira = 0
-        ticket_recompra = 0
-        
-        if pedidos_primeira_compra > 0:
-            df_primeira = df_valid[df_valid['status_pedido_clean'].str.contains('|'.join(primeira_variations), na=False)]
-            if len(df_primeira) > 0:
-                ticket_primeira = df_primeira['valor_numerico'].mean()
-                ticket_primeira = ticket_primeira if not pd.isna(ticket_primeira) else 0
-        
-        if pedidos_recompra > 0:
-            df_recompra = df_valid[df_valid['status_pedido_clean'].str.contains('|'.join(recompra_variations), na=False)]
-            if len(df_recompra) > 0:
-                ticket_recompra = df_recompra['valor_numerico'].mean()
-                ticket_recompra = ticket_recompra if not pd.isna(ticket_recompra) else 0
-        
+        taxa_conversao = 0.0
+        clientes_primeira = set(df_primeira['cliente_unico_id'])
+        if len(clientes_primeira) > 0:
+            clientes_recompra = set(df_recompra['cliente_unico_id'])
+            clientes_convertidos = len(clientes_primeira.intersection(clientes_recompra))
+            taxa_conversao = (clientes_convertidos / len(clientes_primeira)) * 100
+
         return {
-            'total_pedidos': total_pedidos,
-            'pedidos_primeira': pedidos_primeira_compra,
-            'pedidos_recompra': pedidos_recompra,
-            'clientes_unicos': clientes_unicos,
-            'taxa_conversao': taxa_conversao,
-            'ticket_primeira': ticket_primeira,
-            'ticket_recompra': ticket_recompra
+            'pedidos_primeira': int(pedidos_primeira_compra),
+            'pedidos_recompra': int(pedidos_recompra),
+            'taxa_conversao': float(taxa_conversao),
+            'ticket_primeira': float(ticket_primeira),
+            'ticket_recompra': float(ticket_recompra)
         }
-    
+
     except Exception as e:
-        print(f"Erro na análise de recorrência: {str(e)}")
+        print(f"ERRO em analyze_client_recurrence: {e}")
         return {}
 
 def get_latest_update_date(df_pedidos: pd.DataFrame) -> str:
@@ -492,43 +440,43 @@ def get_executive_summary_data() -> Dict:
     """Carrega todos os dados necessários para a Visão Executiva - VERSÃO COMPLETA"""
     try:
         print("📊 Iniciando carregamento dos dados executivos...")
-        
+
         # Carregar dados das planilhas
         df_clientes = load_google_sheet_public(Config.CLASSIFICACAO_SHEET_ID, "classificacao_clientes3")
         df_pedidos = load_google_sheet_public(Config.CLASSIFICACAO_SHEET_ID, "pedidos_com_id2")
         df_satisfacao = load_satisfaction_data()
-        
+
         print(f"✅ Dados carregados: {len(df_clientes)} clientes, {len(df_pedidos)} pedidos")
-        
+
         if df_clientes.empty:
             print("❌ Planilha de clientes vazia")
             return {'error': 'Não foi possível carregar dados dos clientes'}
-        
+
         # Processar dados dos clientes
         df_clientes = df_clientes.copy()
         df_clientes['priority_score'] = df_clientes.apply(calculate_priority_score, axis=1)
-        
-        # Converter receita para numérico (LINHA QUE ESTAVA INCOMPLETA)
+
+        # Converter receita para numérico (essencial para cálculos)
         df_clientes['receita_num'] = pd.to_numeric(
-            df_clientes['receita'].str.replace(',', '.'), 
+            df_clientes['receita'].str.replace(',', '.'),
             errors='coerce'
         ).fillna(0)
-        
+
         print(f"✅ Dados processados: receita total R$ {df_clientes['receita_num'].sum():.0f}")
-        
+
         # KPIs principais
         total_clientes = len(df_clientes)
         clientes_ativos = len(df_clientes[df_clientes['status_churn'] == 'Ativo'])
         clientes_criticos = len(df_clientes[df_clientes['priority_score'] >= 200])
         receita_total = df_clientes['receita_num'].sum()
-        
+
         print(f"✅ KPIs calculados: {total_clientes} clientes, {clientes_ativos} ativos, {clientes_criticos} críticos")
-        
+
         # Análise de recorrência (últimos 6 meses por padrão)
         data_fim = datetime.now()
         data_inicio = data_fim - timedelta(days=180)
         recurrence_data = analyze_client_recurrence(df_pedidos, data_inicio, data_fim)
-        
+
         # Buscar colunas de satisfação automaticamente
         satisfaction_columns = {
             'atendimento': None,
@@ -536,7 +484,7 @@ def get_executive_summary_data() -> Dict:
             'prazo': None,
             'nps': None
         }
-        
+
         if not df_satisfacao.empty:
             for col in df_satisfacao.columns:
                 col_lower = col.lower()
@@ -548,8 +496,8 @@ def get_executive_summary_data() -> Dict:
                     satisfaction_columns['prazo'] = col
                 elif any(x in col_lower for x in ['possibilidade', 'recomenda']) and not satisfaction_columns['nps']:
                     satisfaction_columns['nps'] = col
-        
-        # Calcular métricas de satisfação
+
+        # Calcular métricas de satisfação (período padrão de 30 dias)
         satisfaction_metrics = {}
         for metric_name, column_name in satisfaction_columns.items():
             if column_name:
@@ -564,27 +512,27 @@ def get_executive_summary_data() -> Dict:
                     'color_class': 'info',
                     'details': {}
                 }
-        
+
         # Distribuições para gráficos
         nivel_distribution = df_clientes['nivel_cliente'].value_counts().to_dict()
         churn_distribution = df_clientes['status_churn'].value_counts().to_dict()
-        
+
         # Análise de risco agrupado
         risco_agrupado = df_clientes['risco_recencia'].map({
             'Alto': 'Alto Risco', 'Novo_Alto': 'Alto Risco',
-            'Médio': 'Médio Risco', 'Novo_Médio': 'Médio Risco', 
+            'Médio': 'Médio Risco', 'Novo_Médio': 'Médio Risco',
             'Baixo': 'Baixo Risco', 'Novo_Baixo': 'Baixo Risco'
         }).fillna('Sem Classificação').value_counts().to_dict()
-        
+
         # Clientes Premium em risco para análise crítica
         premium_em_risco = df_clientes[
             (df_clientes['nivel_cliente'].isin(['Premium', 'Gold'])) &
             (df_clientes['risco_recencia'].isin(['Alto', 'Novo_Alto', 'Médio', 'Novo_Médio']))
         ]
-        
+
         print("✅ Dados executivos processados com sucesso")
-        
-        # RETORNO COMPLETO (ERA ISSO QUE ESTAVA FALTANDO!)
+
+        # Estrutura de retorno completa para a API
         return {
             'kpis': {
                 'total_clientes': total_clientes,
@@ -608,12 +556,13 @@ def get_executive_summary_data() -> Dict:
             },
             'latest_update': get_latest_update_date(df_pedidos)
         }
-        
+
     except Exception as e:
         print(f"❌ Erro ao carregar dados executivos: {str(e)}")
         import traceback
         traceback.print_exc()
         return {'error': f'Erro ao processar dados: {str(e)}'}
+        
 
 
 def clear_cache():
