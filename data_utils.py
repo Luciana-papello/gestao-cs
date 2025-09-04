@@ -375,13 +375,16 @@ def analyze_client_recurrence(df_pedidos: pd.DataFrame, data_inicio=None, data_f
 
         df_valid['status_pedido_clean'] = df_valid['status_pedido'].astype(str).str.strip().str.lower()
         
-        df_primeira = df_valid[df_valid['status_pedido_clean'] == 'primeiro']
-        df_recompra = df_valid[df_valid['status_pedido_clean'] == 'recompra']
+        primeira_variations = ['primeiro', 'primeira', 'first', 'nova', 'novo']
+        recompra_variations = ['recompra', 'repeat', 'recorrente', 'retorno']
+
+        df_primeira = df_valid[df_valid["status_pedido_clean"].isin(primeira_variations)]
+        df_recompra = df_valid[df_valid["status_pedido_clean"].isin(recompra_variations)]
 
         pedidos_primeira_compra = len(df_primeira)
         pedidos_recompra = len(df_recompra)
         
-        df_valid['valor_numerico'] = pd.to_numeric(
+        df_valid["valor_numerico"] = pd.to_numeric(
             df_valid['valor_do_pedido'].astype(str).str.replace(',', '.').str.replace(r'[^\d.]', '', regex=True),
             errors='coerce'
         ).fillna(0)
@@ -437,10 +440,6 @@ def get_latest_update_date(df_pedidos: pd.DataFrame) -> str:
     except Exception as e:
         return "N/A"
 
-# === ADICIONAR ESTAS FUNÇÕES NO FINAL DO data_utils.py ===
-
-# ENCONTRAR E SUBSTITUIR A FUNÇÃO INCOMPLETA get_executive_summary_data() 
-# no data_utils.py por esta versão completa:
 
 def get_executive_summary_data() -> Dict:
     """Carrega todos os dados necessários para a Visão Executiva - VERSÃO COMPLETA"""
@@ -452,7 +451,7 @@ def get_executive_summary_data() -> Dict:
         df_pedidos = load_google_sheet_public(Config.CLASSIFICACAO_SHEET_ID, "pedidos_com_id2")
         df_satisfacao = load_satisfaction_data()
 
-        print(f"✅ Dados carregados: {len(df_clientes)} clientes, {len(df_pedidos)} pedidos")
+        print(f"✅ Dados carregados: {len(df_clientes)} clientes, {len(df_pedidos)} pedidos, {len(df_satisfacao)} respostas de satisfação")
 
         if df_clientes.empty:
             print("❌ Planilha de clientes vazia")
@@ -479,16 +478,13 @@ def get_executive_summary_data() -> Dict:
         print(f"✅ KPIs calculados: {total_clientes} clientes, {clientes_ativos} ativos, {clientes_criticos} críticos")
 
         # Análise de recorrência (últimos 6 meses por padrão)
-        data_fim = datetime.now()
-        data_inicio = data_fim - timedelta(days=180)
-        recurrence_data = analyze_client_recurrence(df_pedidos, data_inicio, data_fim)
+        data_fim_rec = datetime.now()
+        data_inicio_rec = data_fim_rec - timedelta(days=180)
+        recurrence_data = analyze_client_recurrence(df_pedidos, data_inicio_rec, data_fim_rec)
 
         # Buscar colunas de satisfação automaticamente
         satisfaction_columns = {
-            'atendimento': None,
-            'produto': None,
-            'prazo': None,
-            'nps': None
+            'atendimento': None, 'produto': None, 'prazo': None, 'nps': None
         }
 
         if not df_satisfacao.empty:
@@ -513,17 +509,12 @@ def get_executive_summary_data() -> Dict:
                 )
             else:
                 satisfaction_metrics[metric_name] = {
-                    'value': 'N/A',
-                    'trend': 'Coluna não encontrada',
-                    'color_class': 'info',
-                    'details': {}
+                    'value': 'N/A', 'trend': 'Coluna não encontrada', 'color_class': 'info', 'details': {}
                 }
 
         # Distribuições para gráficos
         nivel_distribution = df_clientes['nivel_cliente'].value_counts().to_dict()
         churn_distribution = df_clientes['status_churn'].value_counts().to_dict()
-
-        # Análise de risco agrupado
         risco_agrupado = df_clientes['risco_recencia'].map({
             'Alto': 'Alto Risco', 'Novo_Alto': 'Alto Risco',
             'Médio': 'Médio Risco', 'Novo_Médio': 'Médio Risco',
@@ -549,6 +540,13 @@ def get_executive_summary_data() -> Dict:
                 'receita_total': receita_total
             },
             'recurrence': recurrence_data,
+            'charts_data': {
+                'pie_recurrence': recurrence_data.get('distribuicao_periodo', {}),
+                'bar_tickets': {
+                    'Primeira Compra': recurrence_data.get('ticket_primeira', 0),
+                    'Recompra': recurrence_data.get('ticket_recompra', 0)
+                }
+            },
             'satisfaction': satisfaction_metrics,
             'distributions': {
                 'nivel': nivel_distribution,

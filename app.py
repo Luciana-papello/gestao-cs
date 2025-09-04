@@ -47,88 +47,7 @@ def actions_center():
 
 # === APIs DE DADOS ===
 
-@app.route('/api/executive-data')
-def api_executive_data():
-    """API que retorna dados para a Visão Executiva - VERSÃO FINAL CORRIGIDA"""
-    try:
-        print("🔄 [API] Processando /api/executive-data...")
-        
-        # Carregar dados usando a função corrigida
-        data = get_executive_summary_data()
-        
-        if 'error' in data:
-            print(f"❌ [API] Erro nos dados: {data['error']}")
-            return jsonify({
-                'error': data['error'],
-                'status': 'error',
-                'timestamp': datetime.now().isoformat()
-            }), 500
-        
-        # Formatar dados para o frontend - FORMATO FINAL
-        formatted_response = {
-            'kpis': {
-                'total_clientes': {
-                    'value': f"{data['kpis']['total_clientes']:,}".replace(',', '.'),
-                    'raw': data['kpis']['total_clientes'],
-                    'subtitle': 'Base de clientes total',
-                    'color_class': 'info'
-                },
-                'taxa_retencao': {
-                    'value': f"{data['kpis']['taxa_retencao']:.1f}%",
-                    'raw': data['kpis']['taxa_retencao'],
-                    'subtitle': f"{data['kpis']['clientes_ativos']:,} clientes ativos".replace(',', '.'),
-                    'color_class': 'success' if data['kpis']['taxa_retencao'] >= 70 else 'warning' if data['kpis']['taxa_retencao'] >= 50 else 'danger'
-                },
-                'taxa_criticos': {
-                    'value': f"{data['kpis']['taxa_criticos']:.1f}%",
-                    'raw': data['kpis']['taxa_criticos'],
-                    'subtitle': f"{data['kpis']['clientes_criticos']:,} precisam atenção".replace(',', '.'),
-                    'color_class': 'danger' if data['kpis']['taxa_criticos'] >= 20 else 'warning' if data['kpis']['taxa_criticos'] >= 10 else 'success'
-                },
-                'receita_total': {
-                    'value': f"R$ {data['kpis']['receita_total']:,.0f}".replace(',', '.'),
-                    'raw': data['kpis']['receita_total'],
-                    'subtitle': 'Receita acumulada',
-                    'color_class': 'success'
-                }
-            },
-            'recurrence': data.get('recurrence', {}),
-            'satisfaction': data.get('satisfaction', {}),
-            'distributions': data.get('distributions', {}),
-            'critical_analysis': data.get('critical_analysis', {}),
-            'latest_update': data.get('latest_update', 'N/A'),
-            'debug_info': data.get('debug_info', {}),
-            'status': 'success',
-            'timestamp': datetime.now().isoformat()
-        }
-        
-        print(f"✅ [API] Dados formatados - {len(formatted_response['kpis'])} KPIs enviados")
-        return jsonify(formatted_response)
-        
-    except Exception as e:
-        print(f"❌ [API] Erro crítico: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        
-        # Resposta de erro estruturada
-        error_response = {
-            'error': f'Erro interno do servidor: {str(e)}',
-            'kpis': {
-                'total_clientes': {'value': 'Erro', 'raw': 0, 'subtitle': 'Falha ao carregar', 'color_class': 'danger'},
-                'taxa_retencao': {'value': 'Erro', 'raw': 0, 'subtitle': 'Falha ao carregar', 'color_class': 'danger'},
-                'taxa_criticos': {'value': 'Erro', 'raw': 0, 'subtitle': 'Falha ao carregar', 'color_class': 'danger'},
-                'receita_total': {'value': 'Erro', 'raw': 0, 'subtitle': 'Falha ao carregar', 'color_class': 'danger'}
-            },
-            'recurrence': {},
-            'satisfaction': {},
-            'distributions': {},
-            'critical_analysis': {},
-            'latest_update': 'Erro',
-            'status': 'error',
-            'timestamp': datetime.now().isoformat()
-        }
-        
-        return jsonify(error_response), 500
+
 
 @app.route('/api/clients-data')
 def api_clients_data():
@@ -185,7 +104,7 @@ def api_analytics_data():
         
     except Exception as e:
         return jsonify({'error': f'Erro ao carregar analytics: {str(e)}', 'status': 'error'}), 500
-@app.route('/api/recurrence-data')
+@app.route("/api/recurrence-analysis")
 def api_recurrence_data():
     """API específica para dados de recorrência com filtro de data - VERSÃO CORRIGIDA"""
     try:
