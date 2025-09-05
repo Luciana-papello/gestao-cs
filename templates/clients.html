@@ -2,645 +2,126 @@
 
 {% block title %}Gestão de Clientes - Dashboard Papello{% endblock %}
 
+{% block extra_head %}
+<style>
+
+    /* NOVAS CLASSES DE COR PARA O NÍVEL DO CLIENTE */
+    .text-nivel-premium { color: #8b5cf6 !important; font-weight: 600; }
+    .text-nivel-gold { color: #f59e0b !important; font-weight: 600; }
+    .text-nivel-silver { color: #6b7280 !important; font-weight: 600; }
+    .text-nivel-bronze { color: #dc2626 !important; font-weight: 600; }
+
+    .client-card {
+        transition: all 0.2s ease-in-out;
+        border-left-width: 4px;
+    }
+    .client-card:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 8px 25px rgba(0,0,0,0.1);
+    }
+    .client-card .card-body {
+        padding: 1rem 1.25rem;
+    }
+    .client-info-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+        gap: 0.5rem 1.5rem;
+    }
+    .client-info-item {
+        font-size: 0.9rem;
+    }
+    .client-info-item i {
+        margin-right: 8px;
+        color: #6c757d;
+        width: 16px;
+        text-align: center;
+    }
+    .priority-score {
+        font-size: 1.2rem;
+        font-weight: 700;
+    }
+    .filters-container {
+        background-color: #fff;
+        padding: 1.5rem;
+        border-radius: 0.5rem;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+    }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="container-fluid">
-    
-    <!-- Header da Página -->
     <div class="page-header">
         <div class="container">
-            <div class="row align-items-center">
-                <div class="col-md-8">
-                    <h1><i class="fas fa-users me-3"></i>Gestão de Clientes</h1>
-                    <p>Gerenciamento completo da base de clientes Papello</p>
-                </div>
-                <div class="col-md-4 text-md-end">
-                    <button class="btn btn-outline-light btn-lg me-2" onclick="exportData('excel')">
-                        <i class="fas fa-file-excel me-2"></i>Exportar Excel
-                    </button>
-                    <button class="btn btn-outline-light btn-lg" onclick="refreshData()">
-                        <i class="fas fa-sync-alt me-2"></i>Atualizar
-                    </button>
-                </div>
-            </div>
+            <h1><i class="fas fa-users-cog me-3"></i>Gestão de Clientes</h1>
+            <p>Análise, filtragem e segmentação da base de clientes Papello</p>
         </div>
     </div>
-    
+
     <div class="container">
-        
-        <!-- Estatísticas Rápidas -->
-        <div class="row mb-4">
-            <div class="col-lg-3 col-md-6 mb-3">
-                <div class="metric-card info" id="card-total-filtrados">
-                    <i class="fas fa-filter metric-icon"></i>
-                    <div class="metric-title">Clientes Filtrados</div>
-                    <div class="metric-value skeleton">---</div>
-                    <div class="metric-trend">Carregando...</div>
+        <div class="filters-container mb-4">
+            <div class="row g-3 align-items-end">
+                <div class="col-lg-3 col-md-6">
+                    <label for="search-client" class="form-label fw-bold">Buscar por Nome ou Email</label>
+                    <input type="text" id="search-client" class="form-control" placeholder="Digite para buscar...">
                 </div>
-            </div>
-            
-            <div class="col-lg-3 col-md-6 mb-3">
-                <div class="metric-card success" id="card-score-medio">
-                    <i class="fas fa-chart-line metric-icon"></i>
-                    <div class="metric-title">Score Médio</div>
-                    <div class="metric-value skeleton">---</div>
-                    <div class="metric-trend">Carregando...</div>
+                <div class="col-lg-3 col-md-6">
+                    <label for="filter-nivel" class="form-label fw-bold">Nível</label>
+                    <select id="filter-nivel" class="form-select" multiple="multiple"></select>
                 </div>
-            </div>
-            
-            <div class="col-lg-3 col-md-6 mb-3">
-                <div class="metric-card warning" id="card-receita-filtrada">
-                    <i class="fas fa-dollar-sign metric-icon"></i>
-                    <div class="metric-title">Receita Filtrada</div>
-                    <div class="metric-value skeleton">R$ ---</div>
-                    <div class="metric-trend">Carregando...</div>
+                <div class="col-lg-2 col-md-4">
+                    <label for="filter-status" class="form-label fw-bold">Status</label>
+                    <select id="filter-status" class="form-select" multiple="multiple"></select>
                 </div>
-            </div>
-            
-            <div class="col-lg-3 col-md-6 mb-3">
-                <div class="metric-card danger" id="card-acoes-pendentes">
-                    <i class="fas fa-exclamation-circle metric-icon"></i>
-                    <div class="metric-title">Ações Pendentes</div>
-                    <div class="metric-value skeleton">---</div>
-                    <div class="metric-trend">Carregando...</div>
+                <div class="col-lg-1 col-md-2">
+                    <label for="filter-receita-min" class="form-label fw-bold">Receita Mín.</label>
+                    <input type="number" id="filter-receita-min" class="form-control" placeholder="R$">
+                </div>
+                <div class="col-lg-1 col-md-2">
+                    <label for="filter-receita-max" class="form-label fw-bold">Receita Máx.</label>
+                    <input type="number" id="filter-receita-max" class="form-control" placeholder="R$">
+                </div>
+                <div class="col-lg-2 col-md-4">
+                    <label for="items-per-page" class="form-label fw-bold">Itens por pág.</label>
+                    <select id="items-per-page" class="form-select">
+                        <option value="10" selected>10</option>
+                        <option value="25">25</option>
+                        <option value="50">50</option>
+                    </select>
                 </div>
             </div>
         </div>
-        
-        <!-- Filtros Avançados -->
-        <div class="filters-container">
-            <div class="filters-title">
-                <i class="fas fa-filter"></i>
-                Filtros Avançados
-            </div>
-            <div class="row">
-                <div class="col-lg-3 col-md-6 mb-3">
-                    <label for="filter-nivel" class="form-label">🏆 Nível do Cliente</label>
-                    <select class="form-select" id="filter-nivel" multiple>
-                        <option value="Premium">Premium</option>
-                        <option value="Gold">Gold</option>
-                        <option value="Silver">Silver</option>
-                        <option value="Bronze">Bronze</option>
-                    </select>
-                </div>
-                
-                <div class="col-lg-3 col-md-6 mb-3">
-                    <label for="filter-risco" class="form-label">⚠️ Nível de Risco</label>
-                    <select class="form-select" id="filter-risco" multiple>
-                        <option value="Alto">Alto Risco</option>
-                        <option value="Novo_Alto">Novo Alto</option>
-                        <option value="Médio">Médio Risco</option>
-                        <option value="Novo_Médio">Novo Médio</option>
-                        <option value="Baixo">Baixo Risco</option>
-                        <option value="Novo_Baixo">Novo Baixo</option>
-                    </select>
-                </div>
-                
-                <div class="col-lg-3 col-md-6 mb-3">
-                    <label for="filter-churn" class="form-label">🔄 Status</label>
-                    <select class="form-select" id="filter-churn" multiple>
-                        <option value="Ativo">Ativo</option>
-                        <option value="Inativo">Inativo</option>
-                        <option value="Dormant">Dormant</option>
-                    </select>
-                </div>
-                
-                <div class="col-lg-3 col-md-6 mb-3">
-                    <label for="filter-search" class="form-label">🔍 Buscar Cliente</label>
-                    <input type="text" class="form-control" id="filter-search" 
-                           placeholder="Nome ou email...">
-                </div>
-            </div>
-            
-            <div class="row">
-                <div class="col-md-6 mb-3">
-                    <div class="form-check form-switch">
-                        <input class="form-check-input" type="checkbox" id="filter-only-critical">
-                        <label class="form-check-label" for="filter-only-critical">
-                            🚨 Apenas críticos (score > 200)
-                        </label>
-                    </div>
-                </div>
-                
-                <div class="col-md-6 mb-3">
-                    <div class="form-check form-switch">
-                        <input class="form-check-input" type="checkbox" id="filter-only-premium">
-                        <label class="form-check-label" for="filter-only-premium">
-                            👑 Apenas Premium/Gold
-                        </label>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="text-center">
-                <button class="btn btn-papello btn-lg me-3" onclick="applyFilters()">
-                    <i class="fas fa-search me-2"></i>Aplicar Filtros
-                </button>
-                <button class="btn btn-outline-secondary btn-lg" onclick="clearFilters()">
-                    <i class="fas fa-times me-2"></i>Limpar
-                </button>
-            </div>
-        </div>
-        
-        <!-- Lista de Clientes -->
-        <div class="section-header">
-            <i class="fas fa-list section-icon"></i>
-            <h2 class="section-title">Lista de Clientes</h2>
-        </div>
-        
-        <!-- Controles de Paginação Superior -->
+
         <div class="d-flex justify-content-between align-items-center mb-3">
-            <div>
-                <span class="text-muted">Mostrando <span id="showing-range">1-10</span> de <span id="total-clients">0</span> clientes</span>
-            </div>
-            <div>
-                <select class="form-select form-select-sm d-inline-block w-auto me-2" id="per-page">
-                    <option value="10">10 por página</option>
-                    <option value="25">25 por página</option>
-                    <option value="50">50 por página</option>
-                </select>
-            </div>
+            <div id="pagination-info" class="text-muted">Carregando...</div>
+            <nav id="pagination-controls" aria-label="Navegação de clientes">
+                </nav>
         </div>
-        
-        <!-- Container dos Clientes -->
-        <div id="clients-container">
-            <div class="text-center py-5">
-                <div class="spinner-border text-success" role="status">
+        <div class="mb-3 text-end">
+            <button id="export-clients-btn" class="btn btn-success">
+                <i class="fas fa-file-excel me-2"></i> Exportar Seleção (.csv)
+            </button>
+        </div>
+        <div id="client-list-container">
+            <div class="text-center p-5">
+                <div class="spinner-border text-success" style="width: 3rem; height: 3rem;" role="status">
                     <span class="visually-hidden">Carregando clientes...</span>
                 </div>
-                <p class="mt-3 text-muted">Carregando lista de clientes...</p>
+                <p class="mt-3">Carregando clientes...</p>
             </div>
         </div>
-        
-        <!-- Paginação -->
-        <nav aria-label="Paginação de clientes" id="pagination-container">
-            <!-- Será preenchido dinamicamente -->
-        </nav>
-        
-    </div>
-    
-</div>
 
-<!-- Modal de Detalhes do Cliente -->
-<div class="modal fade" id="clientDetailModal" tabindex="-1">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">
-                    <i class="fas fa-user me-2"></i>
-                    <span id="modal-client-name">Detalhes do Cliente</span>
-                </h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-                <div id="client-details-content">
-                    <div class="text-center py-4">
-                        <div class="spinner-border text-success" role="status"></div>
-                    </div>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
-                <button type="button" class="btn btn-papello" id="btn-execute-action">
-                    <i class="fas fa-play me-2"></i>Executar Ação
-                </button>
-            </div>
+         <div class="d-flex justify-content-center align-items-center mt-4">
+            <nav id="pagination-controls-bottom" aria-label="Navegação de clientes">
+                </nav>
         </div>
+
     </div>
 </div>
 {% endblock %}
 
 {% block page_init %}
-loadClientsPage();
-{% endblock %}
-
-{% block extra_scripts %}
-<script>
-let clientsData = [];
-let filteredClients = [];
-let currentPage = 1;
-let itemsPerPage = 10;
-
-function loadClientsPage() {
-    console.log('🏢 Carregando página de clientes...');
-    
-    // Carregar dados dos clientes
-    loadClientsData();
-    
-    // Event listeners
-    $('#filter-search').on('input', debounce(applyFilters, 300));
-    $('#per-page').change(function() {
-        itemsPerPage = parseInt($(this).val());
-        currentPage = 1;
-        displayClients();
-    });
+if (typeof loadClientsPage === 'function') {
+    loadClientsPage();
 }
-
-function loadClientsData() {
-    $.ajax({
-        url: '/api/clients-data',
-        method: 'GET',
-        success: function(data) {
-            clientsData = data.clients || [];
-            filteredClients = [...clientsData];
-            updateStatistics();
-            displayClients();
-            console.log(`✅ ${clientsData.length} clientes carregados`);
-        },
-        error: function() {
-            showAlert('Erro ao carregar dados dos clientes', 'danger');
-        }
-    });
-}
-
-function applyFilters() {
-    const nivelFilter = $('#filter-nivel').val() || [];
-    const riscoFilter = $('#filter-risco').val() || [];
-    const churnFilter = $('#filter-churn').val() || [];
-    const searchTerm = $('#filter-search').val().toLowerCase();
-    const onlyCritical = $('#filter-only-critical').is(':checked');
-    const onlyPremium = $('#filter-only-premium').is(':checked');
-    
-    filteredClients = clientsData.filter(client => {
-        // Filtro de nível
-        if (nivelFilter.length > 0 && !nivelFilter.includes(client.nivel_cliente)) {
-            return false;
-        }
-        
-        // Filtro de risco
-        if (riscoFilter.length > 0 && !riscoFilter.includes(client.risco_recencia)) {
-            return false;
-        }
-        
-        // Filtro de churn
-        if (churnFilter.length > 0 && !churnFilter.includes(client.status_churn)) {
-            return false;
-        }
-        
-        // Busca por texto
-        if (searchTerm && 
-            !client.nome.toLowerCase().includes(searchTerm) &&
-            !client.email.toLowerCase().includes(searchTerm)) {
-            return false;
-        }
-        
-        // Apenas críticos
-        if (onlyCritical && client.priority_score < 200) {
-            return false;
-        }
-        
-        // Apenas Premium/Gold
-        if (onlyPremium && !['Premium', 'Gold'].includes(client.nivel_cliente)) {
-            return false;
-        }
-        
-        return true;
-    });
-    
-    currentPage = 1;
-    updateStatistics();
-    displayClients();
-    
-    showAlert(`Filtros aplicados: ${filteredClients.length} clientes encontrados`, 'success');
-}
-
-function clearFilters() {
-    $('#filter-nivel, #filter-risco, #filter-churn').val([]);
-    $('#filter-search').val('');
-    $('#filter-only-critical, #filter-only-premium').prop('checked', false);
-    
-    filteredClients = [...clientsData];
-    currentPage = 1;
-    updateStatistics();
-    displayClients();
-    
-    showAlert('Filtros removidos', 'info');
-}
-
-function updateStatistics() {
-    const totalClients = filteredClients.length;
-    const avgScore = totalClients > 0 ? 
-        filteredClients.reduce((sum, c) => sum + (c.priority_score || 0), 0) / totalClients : 0;
-    const totalReceita = filteredClients.reduce((sum, c) => sum + parseFloat(c.receita || 0), 0);
-    const pendingActions = filteredClients.filter(c => c.acao_sugerida && c.acao_sugerida !== '').length;
-    
-    updateMetricCard('card-total-filtrados', {
-        value: totalClients.toLocaleString('pt-BR'),
-        trend: 'Após filtros aplicados',
-        colorClass: 'info'
-    });
-    
-    updateMetricCard('card-score-medio', {
-        value: avgScore.toFixed(1),
-        trend: 'Score médio dos filtrados',
-        colorClass: 'success'
-    });
-    
-    updateMetricCard('card-receita-filtrada', {
-        value: `R$ ${formatCurrency(totalReceita)}`,
-        trend: 'Receita total filtrada',
-        colorClass: 'warning'
-    });
-    
-    updateMetricCard('card-acoes-pendentes', {
-        value: pendingActions.toLocaleString('pt-BR'),
-        trend: 'Requerem ação',
-        colorClass: pendingActions > 0 ? 'danger' : 'success'
-    });
-}
-
-function displayClients() {
-    const start = (currentPage - 1) * itemsPerPage;
-    const end = start + itemsPerPage;
-    const clientsToShow = filteredClients.slice(start, end);
-    
-    let html = '';
-    
-    if (clientsToShow.length === 0) {
-        html = `
-            <div class="text-center py-5">
-                <i class="fas fa-search fa-3x text-muted mb-3"></i>
-                <h5>Nenhum cliente encontrado</h5>
-                <p class="text-muted">Tente ajustar os filtros ou termos de busca.</p>
-            </div>
-        `;
-    } else {
-        clientsToShow.forEach(client => {
-            const priorityColor = getPriorityColor(client.priority_score);
-            const statusClass = getStatusClass(client.status_churn);
-            
-            html += `
-                <div class="card mb-3 hover-lift">
-                    <div class="card-body">
-                        <div class="row align-items-center">
-                            <div class="col-md-6">
-                                <div class="d-flex align-items-center mb-2">
-                                    <div class="priority-indicator ${priorityColor} me-3"></div>
-                                    <h5 class="mb-0">${client.nome || 'N/A'}</h5>
-                                    <span class="badge nivel-${client.nivel_cliente?.toLowerCase()} ms-2">
-                                        ${client.nivel_cliente || 'N/A'}
-                                    </span>
-                                </div>
-                                <p class="text-muted mb-1">
-                                    <i class="fas fa-envelope me-1"></i>${client.email || 'N/A'}
-                                </p>
-                                <p class="text-muted mb-0">
-                                    <i class="fas fa-phone me-1"></i>${formatPhone(client.telefone1)}
-                                </p>
-                            </div>
-                            
-                            <div class="col-md-3">
-                                <div class="text-center">
-                                    <div class="h4 text-${priorityColor}">${client.priority_score || 0}</div>
-                                    <small class="text-muted">Score de Prioridade</small>
-                                </div>
-                                <div class="mt-2">
-                                    <span class="status-badge ${statusClass}">
-                                        ${client.status_churn || 'N/A'}
-                                    </span>
-                                </div>
-                            </div>
-                            
-                            <div class="col-md-3 text-end">
-                                <div class="mb-2">
-                                    <strong>R$ ${formatCurrency(client.receita || 0)}</strong>
-                                    <br><small class="text-muted">Receita Total</small>
-                                </div>
-                                <button class="btn btn-outline-papello btn-sm me-1" 
-                                        onclick="viewClientDetails('${client.cliente_unico_id}')">
-                                    <i class="fas fa-eye"></i>
-                                </button>
-                                <button class="btn btn-papello btn-sm" 
-                                        onclick="executeAction('${client.cliente_unico_id}')"
-                                        ${!client.acao_sugerida ? 'disabled' : ''}>
-                                    <i class="fas fa-play"></i>
-                                </button>
-                            </div>
-                        </div>
-                        
-                        ${client.acao_sugerida ? `
-                        <div class="row mt-3">
-                            <div class="col-12">
-                                <div class="alert alert-warning mb-0">
-                                    <i class="fas fa-lightbulb me-2"></i>
-                                    <strong>Ação Sugerida:</strong> ${client.acao_sugerida}
-                                </div>
-                            </div>
-                        </div>
-                        ` : ''}
-                    </div>
-                </div>
-            `;
-        });
-    }
-    
-    $('#clients-container').html(html);
-    updatePagination();
-    updateShowingRange();
-}
-
-function updatePagination() {
-    const totalPages = Math.ceil(filteredClients.length / itemsPerPage);
-    let html = '';
-    
-    if (totalPages > 1) {
-        html += '<ul class="pagination justify-content-center">';
-        
-        // Anterior
-        html += `
-            <li class="page-item ${currentPage === 1 ? 'disabled' : ''}">
-                <a class="page-link" href="#" onclick="changePage(${currentPage - 1})">
-                    <i class="fas fa-chevron-left"></i>
-                </a>
-            </li>
-        `;
-        
-        // Números das páginas
-        const startPage = Math.max(1, currentPage - 2);
-        const endPage = Math.min(totalPages, currentPage + 2);
-        
-        for (let i = startPage; i <= endPage; i++) {
-            html += `
-                <li class="page-item ${i === currentPage ? 'active' : ''}">
-                    <a class="page-link" href="#" onclick="changePage(${i})">${i}</a>
-                </li>
-            `;
-        }
-        
-        // Próxima
-        html += `
-            <li class="page-item ${currentPage === totalPages ? 'disabled' : ''}">
-                <a class="page-link" href="#" onclick="changePage(${currentPage + 1})">
-                    <i class="fas fa-chevron-right"></i>
-                </a>
-            </li>
-        `;
-        
-        html += '</ul>';
-    }
-    
-    $('#pagination-container').html(html);
-}
-
-function updateShowingRange() {
-    const start = (currentPage - 1) * itemsPerPage + 1;
-    const end = Math.min(currentPage * itemsPerPage, filteredClients.length);
-    
-    $('#showing-range').text(`${start}-${end}`);
-    $('#total-clients').text(filteredClients.length.toLocaleString('pt-BR'));
-}
-
-function changePage(page) {
-    const totalPages = Math.ceil(filteredClients.length / itemsPerPage);
-    
-    if (page >= 1 && page <= totalPages) {
-        currentPage = page;
-        displayClients();
-    }
-}
-
-function viewClientDetails(clientId) {
-    const client = clientsData.find(c => c.cliente_unico_id === clientId);
-    if (!client) return;
-    
-    $('#modal-client-name').text(client.nome || 'Cliente');
-    
-    const detailsHtml = `
-        <div class="row">
-            <div class="col-md-6">
-                <h6 class="fw-bold mb-3">📊 Informações Básicas</h6>
-                <p><strong>Nome:</strong> ${client.nome || 'N/A'}</p>
-                <p><strong>Email:</strong> ${client.email || 'N/A'}</p>
-                <p><strong>Telefone:</strong> ${formatPhone(client.telefone1)}</p>
-                <p><strong>CNPJ:</strong> ${client.cpfcnpj || 'N/A'}</p>
-                <p><strong>Cidade:</strong> ${client.cidade || 'N/A'}</p>
-                <p><strong>Estado:</strong> ${client.estado || 'N/A'}</p>
-            </div>
-            
-            <div class="col-md-6">
-                <h6 class="fw-bold mb-3">📈 Métricas de Performance</h6>
-                <p><strong>Nível:</strong> <span class="badge nivel-${client.nivel_cliente?.toLowerCase()}">${client.nivel_cliente || 'N/A'}</span></p>
-                <p><strong>Frequência:</strong> ${client.frequency || 0} pedidos</p>
-                <p><strong>Receita Total:</strong> R$ ${formatCurrency(client.receita || 0)}</p>
-                <p><strong>Última Compra:</strong> ${client.recency_days || 0} dias atrás</p>
-                <p><strong>Score Final:</strong> ${client.score_final || 0}</p>
-                <p><strong>Score de Prioridade:</strong> ${client.priority_score || 0}</p>
-            </div>
-        </div>
-        
-        <div class="row mt-4">
-            <div class="col-12">
-                <h6 class="fw-bold mb-3">⚠️ Status Atual</h6>
-                <div class="row">
-                    <div class="col-md-4">
-                        <p><strong>Risco:</strong> <span class="badge bg-${getRiscoColor(client.risco_recencia)}">${client.risco_recencia || 'N/A'}</span></p>
-                    </div>
-                    <div class="col-md-4">
-                        <p><strong>Churn:</strong> <span class="status-badge ${getStatusClass(client.status_churn)}">${client.status_churn || 'N/A'}</span></p>
-                    </div>
-                    <div class="col-md-4">
-                        <p><strong>Top 20%:</strong> ${client.top_20_valor === 'Sim' ? '⭐ Sim' : 'Não'}</p>
-                    </div>
-                </div>
-            </div>
-        </div>
-        
-        ${client.acao_sugerida ? `
-        <div class="row mt-4">
-            <div class="col-12">
-                <h6 class="fw-bold mb-3">🎯 Ação Recomendada</h6>
-                <div class="alert alert-warning">
-                    <i class="fas fa-lightbulb me-2"></i>
-                    ${client.acao_sugerida}
-                </div>
-            </div>
-        </div>
-        ` : ''}
-    `;
-    
-    $('#client-details-content').html(detailsHtml);
-    
-    // Configurar botão de ação
-    if (client.acao_sugerida) {
-        $('#btn-execute-action').show().off('click').on('click', function() {
-            executeAction(clientId);
-            $('#clientDetailModal').modal('hide');
-        });
-    } else {
-        $('#btn-execute-action').hide();
-    }
-    
-    $('#clientDetailModal').modal('show');
-}
-
-function executeAction(clientId) {
-    const client = clientsData.find(c => c.cliente_unico_id === clientId);
-    if (!client || !client.acao_sugerida) return;
-    
-    if (confirm(`Executar ação para ${client.nome}?\n\nAção: ${client.acao_sugerida}`)) {
-        // Simular execução da ação
-        showAlert(`Ação executada para ${client.nome}!`, 'success');
-        
-        // Atualizar dados (remover ação sugerida)
-        client.acao_sugerida = '';
-        updateStatistics();
-        displayClients();
-    }
-}
-
-function exportData(format) {
-    if (filteredClients.length === 0) {
-        showAlert('Nenhum cliente para exportar', 'warning');
-        return;
-    }
-    
-    if (format === 'excel') {
-        showAlert(`Exportando ${filteredClients.length} clientes para Excel...`, 'info');
-        // Implementar exportação real
-    }
-}
-
-// Funções auxiliares
-function getPriorityColor(score) {
-    if (score >= 200) return 'danger';
-    if (score >= 100) return 'warning';
-    return 'success';
-}
-
-function getStatusClass(status) {
-    if (status === 'Ativo') return 'status-ativo';
-    if (status === 'Inativo') return 'status-inativo';
-    return 'status-dormant';
-}
-
-function getRiscoColor(risco) {
-    if (risco?.includes('Alto')) return 'danger';
-    if (risco?.includes('Médio')) return 'warning';
-    return 'success';
-}
-
-function formatPhone(phone) {
-    if (!phone || phone === '' || phone === 'N/A') return 'N/A';
-    return String(phone).replace('.0', '');
-}
-
-function formatCurrency(value) {
-    const num = parseFloat(value) || 0;
-    if (num >= 1000) {
-        return `${(num/1000).toFixed(0)}K`;
-    }
-    return num.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
-}
-
-function debounce(func, wait) {
-    let timeout;
-    return function executedFunction(...args) {
-        const later = () => {
-            clearTimeout(timeout);
-            func(...args);
-        };
-        clearTimeout(timeout);
-        timeout = setTimeout(later, wait);
-    };
-}
-</script>
 {% endblock %}

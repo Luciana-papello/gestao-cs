@@ -42,12 +42,14 @@ def load_google_sheet_public(sheet_id: str, tab_name: str = None) -> pd.DataFram
         df = pd.read_csv(url)
         df.columns = df.columns.str.strip()
         
-        # --- LINHA CRÍTICA DA CORREÇÃO ---
-        # Verifica se a coluna de data existe e a converte para o formato datetime correto
         if 'data_pedido_realizado' in df.columns:
             print("INFO: Convertendo a coluna 'data_pedido_realizado' para datetime...")
-            df['data_pedido_realizado'] = pd.to_datetime(df['data_pedido_realizado'], dayfirst=True, errors='coerce')
-            print("INFO: Conversão de data concluída.")
+            # CORREÇÃO: Removido 'dayfirst=True'. Pandas irá inferir o formato ISO (YYYY-MM-DD) corretamente.
+            df['data_pedido_realizado'] = pd.to_datetime(df['data_pedido_realizado'], errors='coerce')
+            
+            validas = df['data_pedido_realizado'].notna().sum()
+            total = len(df)
+            print(f"INFO: Conversão de data concluída. {validas}/{total} datas válidas ({(validas/total*100):.1f}%).")
 
         set_cache(cache_key, df)
         # Retorna uma cópia para o uso
@@ -287,12 +289,12 @@ def calculate_satisfaction_metrics(df_satisfacao: pd.DataFrame, column_name: str
             'trend': trend,
             'color_class': color_class,
             'details': {
-                'promotores': promotores,
-                'neutros': neutros,
-                'detratores': detratores,
-                'total_validas': total_validas,
-                'nps_valor': nps_valor
-            }
+                'promotores': int(promotores),
+                'neutros': int(neutros),
+                'detratores': int(detratores),
+                'total_validas': int(total_validas),
+                'nps_valor': float(nps_valor)
+}
         }
     
     else:
@@ -341,74 +343,146 @@ def calculate_satisfaction_metrics(df_satisfacao: pd.DataFrame, column_name: str
             }
         }
 
-def analyze_client_recurrence(df_pedidos: pd.DataFrame, data_inicio=None, data_fim=None) -> Dict:
-    """Analisa a recorrência de clientes com correção explícita do formato da data."""
+def load_google_sheet_corrected(sheet_id: str, sheet_name: str) -> pd.DataFrame:
+    """Carregamento corrigido do Google Sheets que funciona com datas ISO"""
+    try:
+        url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq?tqx=out:csv&sheet={sheet_name}"
+        print(f"📊 Carregando aba '{sheet_name}' com método corrigido...")
+        
+        # Carregar dados
+        df = pd.read_csv(url)
+        print(f"✅ {len(df)} registros carregados")
+        
+        # Se tem coluna de data, converter corretamente
+        if 'data_pedido_realizado' in df.columns:
+            print("🔄 Convertendo datas com método corrigido...")
+            
+            # Múltiplos métodos de conversão para garantir sucesso
+            df['data_original'] = df['data_pedido_realizado'].copy()
+            
+            # Método 1: ISO format direto
+            df['data_convertida'] = pd.to_datetime(df['data_pedido_realizado'], errors='coerce')
+            
+            # Método 2: Se falhou, tentar outros formatos
+            mask_nat = df['data_convertida'].isna()
+            if mask_nat.sum() > 0:
+                print(f"⚠️ {mask_nat.sum()} datas falharam na conversão ISO, tentando outros formatos...")
+                
+                # Tentar formato DD/MM/YYYY
+                df.loc[mask_nat, 'data_convertida'] = pd.to_datetime(
+                    df.loc[mask_nat, 'data_pedido_realizado'], 
+                    format='%d/%m/%Y', 
+                    errors='coerce'
+                )
+                
+                # Tentar formato brasileiro
+                mask_nat2 = df['data_convertida'].isna()
+                if mask_nat2.sum() > 0:
+                    df.loc[mask_nat2, 'data_convertida'] = pd.to_datetime(
+                        df.loc[mask_nat2, 'data_pedido_realizado'], 
+                        dayfirst=True, 
+                        errors='coerce'
+                    )
+            
+            # Substituir coluna original pela convertida
+            df['data_pedido_realizado'] = df['data_convertida']
+            
+            # Estatísticas de conversão
+            validas = df['data_pedido_realizado'].notna().sum()
+            total = len(df)
+            print(f"📊 Conversão de datas: {validas}/{total} ({validas/total*100:.1f}%) válidas")
+            
+            # Limpar colunas auxiliares
+            df = df.drop(['data_original', 'data_convertida'], axis=1, errors='ignore')
+        
+        return df
+        
+    except Exception as e:
+        print(f"❌ Erro ao carregar planilha: {e}")
+        return pd.DataFrame()
+
+def analyze_client_recurrence_corrected(df_pedidos: pd.DataFrame, data_inicio=None, data_fim=None) -> Dict:
+    """
+    Versão corrigida e simplificada que analisa a recorrência de clientes.
+    Funciona com datas corretamente carregadas.
+    """
     if df_pedidos.empty:
         return {}
     
     try:
+        print("🔍 ANÁLISE DE RECORRÊNCIA - INICIANDO...")
+        
+        required_cols = ['data_pedido_realizado', 'status_pedido', 'cliente_unico_id', 'valor_do_pedido']
+        if not all(col in df_pedidos.columns for col in required_cols):
+            print(f"❌ Colunas necessárias não encontradas. Requeridas: {required_cols}")
+            return {}
+        
+        # Trabalhar com cópia e garantir que a coluna de data é do tipo datetime
         df_work = df_pedidos.copy()
+        df_work['data_pedido_realizado'] = pd.to_datetime(df_work['data_pedido_realizado'], errors='coerce')
         
-        # --- CORREÇÃO DEFINITIVA ---
-        # Força o pandas a ler as datas no formato ano-mês-dia, removendo a ambiguidade.
-        df_work['data_pedido_realizado'] = pd.to_datetime(
-            df_work['data_pedido_realizado'], 
-            format='%Y-%m-%d %H:%M:%S', 
-            errors='coerce'
-        )
-        df_valid = df_work.dropna(subset=['data_pedido_realizado']).copy()
-        # --- FIM DA CORREÇÃO ---
+        # Remover quaisquer linhas onde a data não pôde ser convertida
+        df_valid_dates = df_work.dropna(subset=['data_pedido_realizado'])
+        print(f"📊 Total de pedidos com datas válidas: {len(df_valid_dates)} de {len(df_pedidos)}")
 
-        if df_valid.empty:
-            print("AVISO: Nenhuma data válida encontrada após a conversão.")
-            return {}
-
+        # Aplicar filtro de data se fornecido
         if data_inicio and data_fim:
-            df_valid = df_valid[
-                (df_valid['data_pedido_realizado'] >= data_inicio) &
-                (df_valid['data_pedido_realizado'] <= data_fim)
+            df_periodo = df_valid_dates[
+                (df_valid_dates['data_pedido_realizado'] >= pd.to_datetime(data_inicio)) &
+                (df_valid_dates['data_pedido_realizado'] <= pd.to_datetime(data_fim))
             ]
-
-        if df_valid.empty:
-            print(f"AVISO: Nenhum pedido encontrado no período de {data_inicio.strftime('%d/%m/%Y')} a {data_fim.strftime('%d/%m/%Y')}.")
-            return {}
-
-        df_valid['status_pedido_clean'] = df_valid['status_pedido'].astype(str).str.strip().str.lower()
+        else:
+            # Se não houver período, analisa todos os dados com datas válidas
+            df_periodo = df_valid_dates
         
-        primeira_variations = ['primeiro', 'primeira', 'first', 'nova', 'novo']
-        recompra_variations = ['recompra', 'repeat', 'recorrente', 'retorno']
+        print(f"📊 Pedidos no período selecionado: {len(df_periodo)}")
+        if df_periodo.empty:
+            return {
+                'pedidos_primeira': 0, 'pedidos_recompra': 0, 'taxa_conversao': 0.0,
+                'ticket_primeira': 0.0, 'ticket_recompra': 0.0, 'total_pedidos': 0, 'clientes_unicos': 0
+            }
 
-        df_primeira = df_valid[df_valid["status_pedido_clean"].isin(primeira_variations)]
-        df_recompra = df_valid[df_valid["status_pedido_clean"].isin(recompra_variations)]
-
-        pedidos_primeira_compra = len(df_primeira)
-        pedidos_recompra = len(df_recompra)
-        
-        df_valid["valor_numerico"] = pd.to_numeric(
-            df_valid['valor_do_pedido'].astype(str).str.replace(',', '.').str.replace(r'[^\d.]', '', regex=True),
+        # Limpar status e valor do pedido
+        df_periodo['status_clean'] = df_periodo['status_pedido'].astype(str).str.strip().str.lower()
+        df_periodo['valor_numerico'] = pd.to_numeric(
+            df_periodo['valor_do_pedido'].astype(str).str.replace(',', '.').str.replace(r'[^\d.]', '', regex=True),
             errors='coerce'
         ).fillna(0)
-
-        ticket_primeira = df_primeira['valor_numerico'].mean() if pedidos_primeira_compra > 0 else 0.0
-        ticket_recompra = df_recompra['valor_numerico'].mean() if pedidos_recompra > 0 else 0.0
         
+        # Contar por status (usando a lógica robusta de `cs.py`)
+        primeiro_count = len(df_periodo[df_periodo['status_clean'] == 'primeiro'])
+        recompra_count = len(df_periodo[df_periodo['status_clean'] == 'recompra'])
+        
+        # Calcular taxa de conversão
         taxa_conversao = 0.0
-        clientes_primeira = set(df_primeira['cliente_unico_id'])
-        if len(clientes_primeira) > 0:
-            clientes_recompra_set = set(df_recompra['cliente_unico_id'])
-            clientes_convertidos = len(clientes_primeira.intersection(clientes_recompra_set))
-            taxa_conversao = (clientes_convertidos / len(clientes_primeira)) * 100
+        df_primeiro = df_periodo[df_periodo['status_clean'] == 'primeiro']
+        if not df_primeiro.empty:
+            df_recompra = df_periodo[df_periodo['status_clean'] == 'recompra']
+            clientes_primeiro = set(df_primeiro['cliente_unico_id'])
+            clientes_recompra = set(df_recompra['cliente_unico_id'])
+            clientes_convertidos = len(clientes_primeiro.intersection(clientes_recompra))
+            if len(clientes_primeiro) > 0:
+                taxa_conversao = (clientes_convertidos / len(clientes_primeiro)) * 100
 
-        return {
-            'pedidos_primeira': int(pedidos_primeira_compra),
-            'pedidos_recompra': int(pedidos_recompra),
+        # Calcular tickets médios
+        ticket_primeiro = df_primeiro['valor_numerico'].mean() if not df_primeiro.empty else 0.0
+        ticket_recompra = df_periodo[df_periodo['status_clean'] == 'recompra']['valor_numerico'].mean() if recompra_count > 0 else 0.0
+        
+        result = {
+            'pedidos_primeira': int(primeiro_count),
+            'pedidos_recompra': int(recompra_count),
             'taxa_conversao': float(taxa_conversao),
-            'ticket_primeira': float(ticket_primeira),
-            'ticket_recompra': float(ticket_recompra)
+            'ticket_primeira': float(ticket_primeiro),
+            'ticket_recompra': float(ticket_recompra),
+            'total_pedidos': len(df_periodo),
+            'clientes_unicos': df_periodo['cliente_unico_id'].nunique()
         }
-
+        
+        print(f"✅ RESULTADO: {primeiro_count} primeira, {recompra_count} recompra, {taxa_conversao:.1f}% conversão")
+        return result
+        
     except Exception as e:
-        print(f"ERRO em analyze_client_recurrence: {e}")
+        print(f"❌ Erro na análise de recorrência: {e}")
         import traceback
         traceback.print_exc()
         return {}
@@ -480,7 +554,7 @@ def get_executive_summary_data() -> Dict:
         # Análise de recorrência (últimos 6 meses por padrão)
         data_fim_rec = datetime.now()
         data_inicio_rec = data_fim_rec - timedelta(days=180)
-        recurrence_data = analyze_client_recurrence(df_pedidos, data_inicio_rec, data_fim_rec)
+        recurrence_data = analyze_client_recurrence_corrected(df_pedidos, data_inicio_rec, data_fim_rec)
 
         # Buscar colunas de satisfação automaticamente
         satisfaction_columns = {
@@ -714,151 +788,227 @@ def save_action_log(action_data):
     except Exception as e:
         print(f"❌ Erro ao salvar ação: {str(e)}")
 
-# Função para compatibilidade com chamadas do template
-def calculate_satisfaction_metrics(df_satisfacao: pd.DataFrame, column_name: str, 
-                                 is_nps: bool = False, data_inicio=None, data_fim=None) -> Dict:
-    """Calcula métricas de satisfação com comparação temporal"""
-    if df_satisfacao.empty or column_name not in df_satisfacao.columns:
-        return {
-            'value': 'N/A',
-            'trend': 'Coluna não encontrada' if column_name else 'Sem dados',
-            'color_class': 'info',
-            'details': {}
-        }
-    
-    # Usar período padrão se não especificado
-    if not data_inicio or not data_fim:
+
+# === ADICIONAR esta função no data_utils.py para DEBUG ===
+
+def debug_status_pedido_values():
+    """Debug específico para investigar valores da coluna status_pedido"""
+    try:
+        from config import Config
+        
+        print("🔍 DEBUG: Investigando valores de status_pedido...")
+        
+        # Carregar dados
+        df_pedidos = load_google_sheet_public(Config.CLASSIFICACAO_SHEET_ID, "pedidos_com_id2")
+        
+        if df_pedidos.empty:
+            print("❌ Planilha de pedidos vazia")
+            return
+        
+        print(f"📊 Total de pedidos: {len(df_pedidos)}")
+        print(f"📋 Colunas disponíveis: {list(df_pedidos.columns)}")
+        
+        # Verificar se coluna existe
+        if 'status_pedido' not in df_pedidos.columns:
+            print("❌ PROBLEMA: Coluna 'status_pedido' não encontrada!")
+            print("📋 Colunas similares encontradas:")
+            for col in df_pedidos.columns:
+                if 'status' in col.lower() or 'pedido' in col.lower():
+                    print(f"   - {col}")
+            return
+        
+        # Investigar valores únicos
+        print("\n🔍 VALORES ÚNICOS da coluna 'status_pedido':")
+        valores_unicos = df_pedidos['status_pedido'].value_counts()
+        for valor, count in valores_unicos.items():
+            print(f"   '{valor}' -> {count} ocorrências")
+        
+        # Investigar após limpeza
+        print("\n🔍 VALORES APÓS LIMPEZA (lower + strip):")
+        df_pedidos['status_clean'] = df_pedidos['status_pedido'].astype(str).str.strip().str.lower()
+        valores_limpos = df_pedidos['status_clean'].value_counts()
+        for valor, count in valores_limpos.items():
+            print(f"   '{valor}' -> {count} ocorrências")
+        
+        # Testar variações de busca
+        print("\n🔍 TESTANDO VARIAÇÕES DE BUSCA:")
+        primeira_variations = ['primeiro', 'primeira', 'first', 'nova', 'novo']
+        recompra_variations = ['recompra', 'repeat', 'recorrente', 'retorno']
+        
+        print("\n📊 PRIMEIRA COMPRA:")
+        for variation in primeira_variations:
+            count_isin = len(df_pedidos[df_pedidos['status_clean'].isin([variation])])
+            count_contains = len(df_pedidos[df_pedidos['status_clean'].str.contains(variation, na=False)])
+            print(f"   '{variation}' -> isin: {count_isin}, contains: {count_contains}")
+        
+        print("\n📊 RECOMPRA:")
+        for variation in recompra_variations:
+            count_isin = len(df_pedidos[df_pedidos['status_clean'].isin([variation])])
+            count_contains = len(df_pedidos[df_pedidos['status_clean'].str.contains(variation, na=False)])
+            print(f"   '{variation}' -> isin: {count_isin}, contains: {count_contains}")
+        
+        # Filtro por período para comparar
+        print(f"\n🔍 FILTRANDO POR PERÍODO (últimos 180 dias)...")
+        from datetime import datetime, timedelta
+        
+        df_pedidos['data_convertida'] = pd.to_datetime(df_pedidos['data_pedido_realizado'], errors='coerce')
         data_fim = datetime.now()
-        data_inicio = data_fim - timedelta(days=30)
-    
-    # Buscar coluna de data
-    date_column = None
-    for col in df_satisfacao.columns:
-        if any(x in col.lower() for x in ['carimbo', 'data', 'timestamp', 'time']):
-            date_column = col
-            break
-    
-    if date_column and date_column in df_satisfacao.columns:
-        # Filtrar por período
-        df_work = df_satisfacao.copy()
-        df_work[date_column] = pd.to_datetime(df_work[date_column], errors='coerce')
+        data_inicio = data_fim - timedelta(days=180)
         
-        # Período atual
-        mask_atual = (df_work[date_column] >= data_inicio) & (df_work[date_column] <= data_fim)
-        respostas_atual = df_work[mask_atual][column_name].dropna()
+        df_periodo = df_pedidos[
+            (df_pedidos['data_convertida'] >= data_inicio) &
+            (df_pedidos['data_convertida'] <= data_fim)
+        ]
         
-        # Período anterior (mesmo tamanho)
-        periodo_anterior_inicio = data_inicio - (data_fim - data_inicio)
-        mask_anterior = (df_work[date_column] >= periodo_anterior_inicio) & (df_work[date_column] < data_inicio)
-        respostas_anterior = df_work[mask_anterior][column_name].dropna()
-    else:
-        # Sem filtro de data, usar todos os dados
-        respostas_atual = df_satisfacao[column_name].dropna()
-        respostas_anterior = pd.Series(dtype=object)
-    
-    if len(respostas_atual) == 0:
-        return {
-            'value': 'N/A',
-            'trend': 'Sem respostas no período',
-            'color_class': 'info',
-            'details': {}
-        }
-    
-    if is_nps:
-        # Lógica específica para NPS
-        nps_categories = respostas_atual.apply(categorize_nps_from_text)
+        print(f"📊 Pedidos no período: {len(df_periodo)}")
         
-        promoters = len(nps_categories[nps_categories == 'Promotor'])
-        detractors = len(nps_categories[nps_categories == 'Detrator'])
-        total_valid = len(nps_categories[nps_categories != 'Indefinido'])
+        if len(df_periodo) > 0:
+            print("\n📊 STATUS NO PERÍODO:")
+            status_periodo = df_periodo['status_clean'].value_counts()
+            for valor, count in status_periodo.items():
+                print(f"   '{valor}' -> {count} ocorrências")
         
-        if total_valid == 0:
-            nps_score = 0
+        print("\n✅ Debug concluído!")
+        
+    except Exception as e:
+        print(f"❌ Erro no debug: {e}")
+        import traceback
+        traceback.print_exc()   
+
+def debug_date_conversion():
+    """Debug específico para investigar problema na conversão de datas"""
+    try:
+        from config import Config
+        from datetime import datetime, timedelta
+        
+        print("🔍 DEBUG: Investigando conversão de datas...")
+        
+        # Carregar dados
+        df_pedidos = load_google_sheet_public(Config.CLASSIFICACAO_SHEET_ID, "pedidos_com_id2")
+        
+        if df_pedidos.empty:
+            print("❌ Planilha vazia")
+            return
+        
+        print(f"📊 Total de pedidos carregados: {len(df_pedidos)}")
+        
+        # Verificar coluna de data
+        print(f"\n🔍 VALORES BRUTOS da coluna 'data_pedido_realizado':")
+        print("Primeiras 5 datas:")
+        for i in range(min(5, len(df_pedidos))):
+            valor_bruto = df_pedidos.iloc[i]['data_pedido_realizado']
+            print(f"   [{i}] '{valor_bruto}' (tipo: {type(valor_bruto)})")
+        
+        # Testar diferentes métodos de conversão
+        print(f"\n🔍 TESTANDO CONVERSÕES DE DATA:")
+        
+        # Método 1: Padrão (errors='coerce')
+        print("1. Conversão padrão (errors='coerce'):")
+        df_test1 = df_pedidos.copy()
+        df_test1['data_conv_1'] = pd.to_datetime(df_test1['data_pedido_realizado'], errors='coerce')
+        validas_1 = df_test1['data_conv_1'].notna().sum()
+        print(f"   Válidas: {validas_1} de {len(df_pedidos)} ({validas_1/len(df_pedidos)*100:.1f}%)")
+        
+        # Método 2: Formato específico ISO
+        print("2. Conversão com formato ISO (YYYY-MM-DD):")
+        df_test2 = df_pedidos.copy()
+        df_test2['data_conv_2'] = pd.to_datetime(df_test2['data_pedido_realizado'], format='%Y-%m-%d %H:%M:%S', errors='coerce')
+        validas_2 = df_test2['data_conv_2'].notna().sum()
+        print(f"   Válidas: {validas_2} de {len(df_pedidos)} ({validas_2/len(df_pedidos)*100:.1f}%)")
+        
+        # Método 3: Sem especificar formato
+        print("3. Conversão automática (sem format):")
+        df_test3 = df_pedidos.copy()
+        df_test3['data_conv_3'] = pd.to_datetime(df_test3['data_pedido_realizado'], errors='coerce')
+        validas_3 = df_test3['data_conv_3'].notna().sum()
+        print(f"   Válidas: {validas_3} de {len(df_pedidos)} ({validas_3/len(df_pedidos)*100:.1f}%)")
+        
+        # Usar o melhor método
+        melhor_metodo = max([(validas_1, 1), (validas_2, 2), (validas_3, 3)])[1]
+        print(f"\n✅ MELHOR MÉTODO: {melhor_metodo}")
+        
+        if melhor_metodo == 1:
+            df_work = df_test1
+            df_work['data_convertida'] = df_work['data_conv_1']
+        elif melhor_metodo == 2:
+            df_work = df_test2
+            df_work['data_convertida'] = df_work['data_conv_2']
         else:
-            nps_score = ((promoters - detractors) / total_valid) * 100
+            df_work = df_test3
+            df_work['data_convertida'] = df_work['data_conv_3']
         
-        # Comparação com período anterior se disponível
-        if len(respostas_anterior) > 0:
-            nps_anterior = respostas_anterior.apply(categorize_nps_from_text)
-            promoters_ant = len(nps_anterior[nps_anterior == 'Promotor'])
-            detractors_ant = len(nps_anterior[nps_anterior == 'Detrator'])
-            total_ant = len(nps_anterior[nps_anterior != 'Indefinido'])
-            
-            if total_ant > 0:
-                nps_anterior_score = ((promoters_ant - detractors_ant) / total_ant) * 100
-                diferenca = nps_score - nps_anterior_score
-                
-                if diferenca > 5:
-                    trend = f"↗️ +{diferenca:.1f} vs anterior"
-                    color_class = "success"
-                elif diferenca < -5:
-                    trend = f"↘️ {diferenca:.1f} vs anterior"
-                    color_class = "danger"
-                else:
-                    trend = f"➡️ {diferenca:+.1f} vs anterior"
-                    color_class = "success" if nps_score >= 50 else "warning" if nps_score >= 0 else "danger"
-            else:
-                trend = f"{total_valid} avaliações"
-                color_class = "success" if nps_score >= 50 else "warning" if nps_score >= 0 else "danger"
+        # Remover nulos
+        df_valid = df_work.dropna(subset=['data_convertida']).copy()
+        print(f"📊 Pedidos com data válida: {len(df_valid)}")
+        
+        # Investigar range de datas
+        data_min = df_valid['data_convertida'].min()
+        data_max = df_valid['data_convertida'].max()
+        print(f"\n📅 RANGE DE DATAS na planilha:")
+        print(f"   Mínima: {data_min}")
+        print(f"   Máxima: {data_max}")
+        
+        # Testar filtro de 180 dias com diferentes datas finais
+        print(f"\n🔍 TESTANDO FILTRO DE 180 DIAS:")
+        
+        # Teste A: Data fim = hoje
+        data_fim_hoje = datetime.now()
+        data_inicio_hoje = data_fim_hoje - timedelta(days=180)
+        
+        df_filtrado_hoje = df_valid[
+            (df_valid['data_convertida'] >= data_inicio_hoje) &
+            (df_valid['data_convertida'] <= data_fim_hoje)
+        ]
+        
+        print(f"A. Fim=HOJE ({data_fim_hoje.strftime('%Y-%m-%d')}):")
+        print(f"   Início: {data_inicio_hoje.strftime('%Y-%m-%d')}")
+        print(f"   Registros: {len(df_filtrado_hoje)}")
+        
+        # Teste B: Data fim = data máxima da planilha
+        data_fim_max = data_max
+        data_inicio_max = data_fim_max - timedelta(days=180)
+        
+        df_filtrado_max = df_valid[
+            (df_valid['data_convertida'] >= data_inicio_max) &
+            (df_valid['data_convertida'] <= data_fim_max)
+        ]
+        
+        print(f"B. Fim=MAX_PLANILHA ({data_fim_max.strftime('%Y-%m-%d')}):")
+        print(f"   Início: {data_inicio_max.strftime('%Y-%m-%d')}")
+        print(f"   Registros: {len(df_filtrado_max)}")
+        
+        # Teste C: Últimos 180 dias dos dados disponíveis
+        print(f"C. ANÁLISE POR PERÍODO:")
+        
+        # Ver quantos registros por mês
+        df_valid['ano_mes'] = df_valid['data_convertida'].dt.to_period('M')
+        registros_por_mes = df_valid['ano_mes'].value_counts().sort_index()
+        
+        print("   Registros por mês:")
+        for periodo, count in registros_por_mes.tail(10).items():
+            print(f"     {periodo}: {count} registros")
+        
+        # Análise por status no período que dá mais registros
+        periodo_correto = df_filtrado_max if len(df_filtrado_max) > len(df_filtrado_hoje) else df_filtrado_hoje
+        
+        print(f"\n📊 ANÁLISE DO MELHOR PERÍODO ({len(periodo_correto)} registros):")
+        periodo_correto['status_clean'] = periodo_correto['status_pedido'].astype(str).str.strip().str.lower()
+        
+        primeiro_count = len(periodo_correto[periodo_correto['status_clean'] == 'primeiro'])
+        recompra_count = len(periodo_correto[periodo_correto['status_clean'] == 'recompra'])
+        
+        print(f"   Primeiro: {primeiro_count}")
+        print(f"   Recompra: {recompra_count}")
+        print(f"   Total: {primeiro_count + recompra_count}")
+        
+        if primeiro_count + recompra_count > 3000:
+            print("🎯 ESTE PARECE SER O PERÍODO CORRETO!")
         else:
-            trend = f"{total_valid} avaliações"
-            color_class = "success" if nps_score >= 50 else "warning" if nps_score >= 0 else "danger"
+            print("⚠️ Ainda não encontrou o período correto...")
         
-        return {
-            'value': f"{nps_score:.0f}",
-            'trend': trend,
-            'color_class': color_class,
-            'details': {
-                'nps_score': nps_score,
-                'promoters': promoters,
-                'detractors': detractors,
-                'total_respostas': total_valid
-            }
-        }
-    else:
-        # Métricas normais (produto, atendimento, prazo)
-        scores_atual = respostas_atual.apply(convert_text_score_to_number).dropna()
+        print("\n✅ Debug de datas concluído!")
         
-        if len(scores_atual) == 0:
-            return {
-                'value': 'N/A',
-                'trend': 'Erro na conversão',
-                'color_class': 'info',
-                'details': {}
-            }
-        
-        valor_atual = scores_atual.mean()
-        
-        # Calcular período anterior se houver dados
-        if len(respostas_anterior) > 0:
-            scores_anterior = respostas_anterior.apply(convert_text_score_to_number).dropna()
-            
-            if len(scores_anterior) > 0:
-                valor_anterior = scores_anterior.mean()
-                diferenca = valor_atual - valor_anterior
-                
-                if diferenca > 0.3:
-                    trend = f"↗️ +{diferenca:.1f} vs anterior"
-                    color_class = "success"
-                elif diferenca < -0.3:
-                    trend = f"↘️ {diferenca:.1f} vs anterior"
-                    color_class = "danger"
-                else:
-                    trend = f"➡️ {diferenca:+.1f} vs anterior"
-                    color_class = "success" if valor_atual >= 8 else "warning" if valor_atual >= 6 else "danger"
-            else:
-                trend = f"{len(respostas_atual)} avaliações"
-                color_class = "success" if valor_atual >= 8 else "warning" if valor_atual >= 6 else "danger"
-        else:
-            trend = f"{len(respostas_atual)} avaliações"
-            color_class = "success" if valor_atual >= 8 else "warning" if valor_atual >= 6 else "danger"
-        
-        return {
-            'value': f"{valor_atual:.1f}/10",
-            'trend': trend,
-            'color_class': color_class,
-            'details': {
-                'valor_medio': valor_atual,
-                'total_respostas': len(respostas_atual)
-            }
-        }
+    except Exception as e:
+        print(f"❌ Erro no debug de datas: {e}")
+        import traceback
+        traceback.print_exc()         

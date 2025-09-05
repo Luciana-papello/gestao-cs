@@ -1,5 +1,15 @@
 {% extends "base.html" %}
-
+{% block extra_head %}
+<style>
+    /* Estilo para ajustar a fonte de números muito longos nos cards */
+    .metric-value.long-number {
+        font-size: 2rem; /* Reduz um pouco a fonte (original era 2.2rem ou 45px) */
+        white-space: nowrap; /* Impede a quebra de linha */
+        overflow: hidden; /* Garante que não vai vazar do card */
+        text-overflow: ellipsis; /* Adiciona '...' se ainda não couber */
+    }
+</style>
+{% endblock %}
 {% block title %}Visão Executiva - Dashboard Papello{% endblock %}
 
 {% block content %}
@@ -72,9 +82,9 @@
             </div>
         </div>
         
-        <!-- Análise de Recorrência -->
+        <!-- Análise de Recorrência de Clientes -->
         <div class="section-header">
-            <i class="fas fa-redo section-icon"></i>
+            <i class="fas fa-sync-alt section-icon"></i>
             <h2 class="section-title">Análise de Recorrência de Clientes</h2>
         </div>
         
@@ -136,7 +146,7 @@
             </div>
             
             <div class="col-lg-3 col-md-6 mb-3">
-                <div class="metric-card warning" id="card-conversao">
+                <div class="metric-card warning" id="card-taxa-conversao">
                     <i class="fas fa-percentage metric-icon"></i>
                     <div class="metric-title">Taxa de Conversão</div>
                     <div class="metric-value skeleton" data-skeleton="45px">---%</div>
@@ -411,7 +421,7 @@
                         <i class="fas fa-exclamation-triangle"></i>
                         Status de Risco
                     </div>
-                    <canvas id="chart-risco-bar"></canvas>
+                    <canvas id="chart-risco-pie"></canvas>
                 </div>
             </div>
         </div>
@@ -487,28 +497,3 @@
 loadExecutiveDashboard();
 initializeDateFilters();
 {% endblock %}
-
-        <!-- Gráficos de Distribuição -->
-        <div class="row mb-4">
-            <div class="col-lg-6 mb-3">
-                <div class="chart-card">
-                    <div class="chart-title">
-                        <i class="fas fa-chart-pie"></i>
-                        Distribuição por Nível
-                    </div>
-                    <canvas id="chart-nivel-pie"></canvas>
-                </div>
-            </div>
-            
-            <div class="col-lg-6 mb-3">
-                <div class="chart-card">
-                    <div class="chart-title">
-                        <i class="fas fa-chart-bar"></i>
-                        Status de Risco
-                    </div>
-                    <canvas id="chart-risco-pie"></canvas>
-                </div>
-            </div>
-        </div>
-
-

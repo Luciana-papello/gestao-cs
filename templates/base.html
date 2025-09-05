@@ -11,7 +11,16 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     
     <!-- Google Fonts - Inter (fonte moderna) -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <style>
+        /* Aplica a fonte Montserrat em todo o dashboard */
+        body, .btn, .form-control, .form-select, .card-title, .nav-link, h1, h2, h3, h4, h5, h6 {
+            font-family: 'Montserrat', sans-serif;
+        }
+    </style>
     
     <!-- Font Awesome Icons -->
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
@@ -22,7 +31,14 @@
     <!-- Meta tags -->
     <meta name="description" content="Dashboard de Customer Success - Papello Embalagens">
     <meta name="author" content="Papello">
-    
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/select2-bootstrap-5-theme/1.3.0/select2-bootstrap-5-theme.min.css" rel="stylesheet" />
+
+    <link href="{{ url_for('static', filename='css/papello.css') }}" rel="stylesheet">
+
+
     {% block extra_head %}{% endblock %}
 </head>
 <body class="bg-light">
@@ -52,8 +68,8 @@
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link {% if request.endpoint == 'clients' %}active{% endif %}" 
-                           href="/clients">
+                        <a class="nav-link {% if 'client' in request.endpoint %}active{% endif %}" 
+                        href="/clients">
                             <i class="fas fa-users me-1"></i> Gestão de Clientes
                         </a>
                     </li>
@@ -112,20 +128,19 @@
     </main>
     
     <!-- Scripts -->
-    <!-- 1. jQuery primeiro -->
     <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
     
-    <!-- 2. Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
     
-    <!-- 3. Chart.js com carregamento controlado -->
     <script>
         console.log('🔄 Iniciando carregamento do Chart.js...');
         
         // Criar promise para controlar o carregamento do Chart.js
         window.chartJsReady = new Promise((resolve, reject) => {
             const script = document.createElement('script');
-            script.src = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.min.js';
+            script.src = 'https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js';
             script.onload = () => {
                 console.log('✅ Chart.js carregado com sucesso');
                 // Configurações globais

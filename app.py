@@ -8,7 +8,7 @@ from data_utils import (
     load_google_sheet_public,
     load_satisfaction_data,
     calculate_priority_score,
-    analyze_client_recurrence,
+    analyze_client_recurrence_corrected,
     clear_cache,
     format_number,
     format_phone_number
@@ -30,10 +30,7 @@ def executive_dashboard():
     """Dashboard da Visão Executiva"""
     return render_template('executive.html')
 
-@app.route('/clients')
-def client_management():
-    """Gestão de Clientes"""
-    return render_template('clients.html')
+
 
 @app.route('/analytics')
 def analytics_dashboard():
@@ -49,29 +46,7 @@ def actions_center():
 
 
 
-@app.route('/api/clients-data')
-def api_clients_data():
-    """API para dados dos clientes"""
-    try:
-        df_clientes = load_google_sheet_public(Config.CLASSIFICACAO_SHEET_ID, "classificacao_clientes3")
-        
-        if df_clientes.empty:
-            return jsonify({'error': 'Dados de clientes não disponíveis'}), 500
-        
-        # Processar dados
-        df_clientes['priority_score'] = df_clientes.apply(calculate_priority_score, axis=1)
-        
-        # Converter para lista de dicionários
-        clients = df_clientes.to_dict('records')
-        
-        return jsonify({
-            'clients': clients,
-            'total': len(clients),
-            'status': 'success'
-        })
-        
-    except Exception as e:
-        return jsonify({'error': f'Erro ao carregar clientes: {str(e)}', 'status': 'error'}), 500
+
 
 @app.route('/api/analytics-data')
 def api_analytics_data():
@@ -104,12 +79,13 @@ def api_analytics_data():
         
     except Exception as e:
         return jsonify({'error': f'Erro ao carregar analytics: {str(e)}', 'status': 'error'}), 500
-@app.route("/api/recurrence-analysis")
-def api_recurrence_data():
+@app.route('/api/recurrence-analysis')
+def api_recurrence_analysis():
     """API específica para dados de recorrência com filtro de data - VERSÃO CORRIGIDA"""
     try:
-        data_inicio_str = request.args.get('data_inicio')
-        data_fim_str = request.args.get('data_fim')
+        # Obter parâmetros de data
+        data_inicio_str = request.args.get('start')
+        data_fim_str = request.args.get('end')
 
         # Conversão das datas
         if data_inicio_str and data_fim_str:
@@ -125,23 +101,26 @@ def api_recurrence_data():
         df_pedidos = load_google_sheet_public(Config.CLASSIFICACAO_SHEET_ID, "pedidos_com_id2")
 
         if df_pedidos.empty:
+            print("❌ Dados de pedidos não disponíveis")
             return jsonify({'error': 'Dados de pedidos não disponíveis'}), 500
 
-        # Analisar recorrência
-        recurrence_data = analyze_client_recurrence(df_pedidos, data_inicio, data_fim)
+        # Analisar recorrência com a função corrigida
+        recurrence_data = analyze_client_recurrence_corrected(df_pedidos, data_inicio, data_fim)
 
         if not recurrence_data:
+            print("❌ Nenhum dado de recorrência encontrado")
             return jsonify({'error': 'Nenhum dado de recorrência encontrado para o período'}), 404
 
-        # Formatar resposta
+        # Calcular período em dias
         periodo_dias = (data_fim - data_inicio).days
         
         # Configurar cores para os gráficos
         colors_config = {
-            'warning': Config.COLORS['warning'],
-            'success': Config.COLORS['success']
+            'warning': Config.COLORS.get('warning', '#f59e0b'),
+            'success': Config.COLORS.get('success', '#10b981')
         }
 
+        # Formatar resposta completa
         formatted_data = {
             'periodo': {
                 'inicio': data_inicio.strftime('%d/%m/%Y'),
@@ -153,24 +132,18 @@ def api_recurrence_data():
                 'pedidos_recompra': recurrence_data.get('pedidos_recompra', 0), 
                 'taxa_conversao': recurrence_data.get('taxa_conversao', 0.0),
                 'ticket_primeira': recurrence_data.get('ticket_primeira', 0.0),
-                'ticket_recompra': recurrence_data.get('ticket_recompra', 0.0)
+                'ticket_recompra': recurrence_data.get('ticket_recompra', 0.0),
+                'clientes_unicos': recurrence_data.get('clientes_unicos', 0),
+                'total_pedidos': recurrence_data.get('total_pedidos', 0)
             },
-            'charts_data': {
+            'charts': {
                 'pie_recurrence': {
-                    'labels': ['Primeira Compra', 'Recompra'],
-                    'values': [
-                        recurrence_data.get('pedidos_primeira', 0),
-                        recurrence_data.get('pedidos_recompra', 0)
-                    ],
-                    'colors': [colors_config['warning'], colors_config['success']]
+                    'Primeira Compra': recurrence_data.get('pedidos_primeira', 0),
+                    'Recompra': recurrence_data.get('pedidos_recompra', 0)
                 },
                 'bar_tickets': {
-                    'labels': ['Primeira Compra', 'Recompra'],
-                    'values': [
-                        recurrence_data.get('ticket_primeira', 0),
-                        recurrence_data.get('ticket_recompra', 0)
-                    ],
-                    'colors': [colors_config['warning'], colors_config['success']]
+                    'Primeira Compra': recurrence_data.get('ticket_primeira', 0),
+                    'Recompra': recurrence_data.get('ticket_recompra', 0)
                 }
             },
             'status': 'success'
@@ -180,10 +153,13 @@ def api_recurrence_data():
         return jsonify(formatted_data)
 
     except Exception as e:
-        print(f"❌ Erro em /api/recurrence-data: {str(e)}")
+        print(f"❌ Erro em /api/recurrence-analysis: {str(e)}")
         import traceback
         traceback.print_exc()
-        return jsonify({'error': f'Erro ao analisar recorrência: {str(e)}'}), 500
+        return jsonify({
+            'error': f'Erro ao analisar recorrência: {str(e)}',
+            'status': 'error'
+        }), 500
 
 # 2. ADICIONAR ROTA PARA DADOS CRÍTICOS
 @app.route('/api/critical-analysis')
@@ -438,7 +414,60 @@ def api_test():
             '/api/refresh-data'
         ]
     })
+@app.route('/api/test-corrected')
+def test_corrected():
+    from data_utils import analyze_client_recurrence_corrected, load_google_sheet_public
+    from config import Config
+    from datetime import datetime, timedelta
+    
+    # Carregar dados
+    df_pedidos = load_google_sheet_public(Config.CLASSIFICACAO_SHEET_ID, "pedidos_com_id2")
+    
+    # Testar análise corrigida  
+    data_fim = datetime.now()
+    data_inicio = data_fim - timedelta(days=180)
+    
+    result = analyze_client_recurrence_corrected(df_pedidos, data_inicio, data_fim)
+    
+    return f"Primeiro: {result.get('pedidos_primeira', 0)}, Recompra: {result.get('pedidos_recompra', 0)}"
 
+@app.route('/clients')
+def client_management():
+    """Dashboard de Gestão de Clientes"""
+    return render_template('clients.html')
+
+@app.route('/api/clients-data')
+def api_clients_data():
+    """API para fornecer a lista completa de clientes com score de prioridade."""
+    try:
+        df_clientes = load_google_sheet_public(Config.CLASSIFICACAO_SHEET_ID, "classificacao_clientes3")
+        
+        if df_clientes.empty:
+            return jsonify({'error': 'Dados de clientes não disponíveis', 'status': 'error'}), 500
+        
+        # Garante que os valores NaN não quebrem a conversão para JSON
+        df_clientes = df_clientes.fillna('')
+        
+        # Calcula o score de prioridade para cada cliente
+        df_clientes['priority_score'] = df_clientes.apply(calculate_priority_score, axis=1)
+        
+        # Ordena os clientes pelo score (mais críticos primeiro)
+        df_clientes = df_clientes.sort_values('priority_score', ascending=False)
+        
+        # Converte o DataFrame para uma lista de dicionários
+        clients_data = df_clientes.to_dict('records')
+        
+        return jsonify({
+            'clients': clients_data,
+            'total': len(clients_data),
+            'status': 'success'
+        })
+        
+    except Exception as e:
+        print(f"❌ Erro em /api/clients-data: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': f'Erro ao carregar dados dos clientes: {str(e)}', 'status': 'error'}), 500
 # === INICIALIZAÇÃO ===
 
 if __name__ == '__main__':

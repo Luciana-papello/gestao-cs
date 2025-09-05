@@ -16,14 +16,18 @@ function initializeDashboard() {
     // Inicializar filtros de data
     initializeDateFilters();
     
-    // Carregar dados da página atual
     const currentPage = getCurrentPage();
     if (currentPage === 'executive') {
+        initializeDateFilters(); // Apenas na página executiva
         loadExecutiveDashboard();
+    } else if (currentPage === 'clients') { // <-- ADICIONAR ESTE BLOCO
+        loadClientsPage();
     }
     
     console.log('✅ Dashboard inicializado com sucesso');
 }
+
+
 
 function getCurrentPage() {
     const path = window.location.pathname;
@@ -55,16 +59,26 @@ function updateLastUpdateTime() {
 function updateMetricCard(cardId, data) {
     const card = $(`#${cardId}`);
     if (!card.length) return;
-    
+
     // Atualizar valor
     const valueElement = card.find('.metric-value');
     valueElement.removeClass('skeleton').text(data.value || '---');
-    
+
+    // --- LÓGICA DE OTIMIZAÇÃO DE FONTE ADICIONADA ---
+    // Se o texto do valor for longo (ex: R$ 28.503.101 tem mais de 10 caracteres),
+    // adicionamos a classe 'long-number' para reduzir a fonte.
+    if (data.value && data.value.length > 10) {
+        valueElement.addClass('long-number');
+    } else {
+        valueElement.removeClass('long-number');
+    }
+    // ----------------------------------------------------
+
     // Atualizar trend
     if (data.trend) {
         card.find('.metric-trend').text(data.trend);
     }
-    
+
     // Atualizar classe de cor
     if (data.colorClass) {
         card.removeClass('success warning danger info')
@@ -114,7 +128,15 @@ async function loadExecutiveDashboard() {
             throw new Error(data.error || 'A API retornou um erro.');
         }
 
+        // --- CORREÇÃO ADICIONADA AQUI ---
+        // Armazena os dados em uma variável global para que outras funções possam usá-los.
+        window.currentDashboardData = data; 
+        // ---------------------------------
+
         console.log('📊 Dados recebidos da API:', data);
+
+        // Atualizar todas as seções da página
+        updateKPIs(data.kpis);
 
         // Atualizar todas as seções da página
         updateKPIs(data.kpis);
@@ -259,15 +281,15 @@ function updateSatisfactionMetrics(satisfaction) {
             npsDetails.html(`
                 <div class="row text-center">
                     <div class="col-4">
-                        <div class="text-success fw-bold">${details.promoters || 0}</div>
+                        <div class="text-success fw-bold">${details.promotores || 0}</div>
                         <small class="text-muted">Promotores</small>
                     </div>
                     <div class="col-4">
-                        <div class="text-warning fw-bold">${(details.total_respostas - details.promoters - details.detractors) || 0}</div>
+                        <div class="text-warning fw-bold">${(details.neutros) || 0}</div>
                         <small class="text-muted">Neutros</small>
                     </div>
                     <div class="col-4">
-                        <div class="text-danger fw-bold">${details.detractors || 0}</div>
+                        <div class="text-danger fw-bold">${details.detratores|| 0}</div>
                         <small class="text-muted">Detratores</small>
                     </div>
                 </div>
@@ -411,27 +433,80 @@ async function updateRecurrenceAnalysis() {
     console.log('🔄 Atualizando análise de recorrência...');
     
     try {
-        // Obter datas dos filtros
-        const startDate = $('#recurrence-start').val();
-        const endDate = $('#recurrence-end').val();
-        
-        if (!startDate || !endDate) {
-            console.warn('⚠️ Datas de recorrência não definidas, usando padrão');
-            return;
-        }
+        // Obter datas dos filtros ou usar padrão
+        let startDate = $('#recurrence-start').val() || '2025-03-08';
+        let endDate = $('#recurrence-end').val() || '2025-09-04';
         
         const response = await fetch(`/api/recurrence-analysis?start=${startDate}&end=${endDate}`);
+        
         if (!response.ok) {
             throw new Error(`Erro na API de recorrência: ${response.statusText}`);
         }
         
         const data = await response.json();
+        console.log('📊 Dados de recorrência recebidos:', data);
         
-        // Atualizar cards de recorrência
-        updateRecurrenceCards(data);
+        // Verificar se dados chegaram
+        if (!data.metrics) {
+            throw new Error('Dados de métricas não encontrados na resposta');
+        }
         
-        // Atualizar gráficos de recorrência
-        if (typeof updateRecurrenceCharts === 'function') {
+        // *** CORREÇÃO PRINCIPAL: Atualizar cards com os dados corretos ***
+        console.log('🔄 Atualizando cards de recorrência...');
+        
+        // Card Novos Clientes
+        updateMetricCard('card-novos-clientes', {
+            value: data.metrics.pedidos_primeira.toLocaleString('pt-BR'),
+            trend: `Primeira compra no período`,
+            colorClass: 'info'
+        });
+        
+        // Card Recompras  
+        updateMetricCard('card-recompras', {
+            value: data.metrics.pedidos_recompra.toLocaleString('pt-BR'),
+            trend: `Pedidos recorrentes`,
+            colorClass: 'success'
+        });
+        
+        // Card Taxa de Conversão
+        const taxa = data.metrics.taxa_conversao;
+        updateMetricCard('card-taxa-conversao', {
+            value: `${taxa.toFixed(1)}%`,
+            trend: 'Primeira → Recompra',
+            colorClass: taxa >= 30 ? 'success' : taxa >= 15 ? 'warning' : 'danger'
+        });
+        
+        // Card Ticket Recompra
+        const ticketRecompra = data.metrics.ticket_recompra;
+        const ticketPrimeira = data.metrics.ticket_primeira;
+        let trend = 'Valor médio dos pedidos de recompra';
+        let colorClass = 'info';
+        
+        if (ticketPrimeira > 0) {
+            const diferenca = ((ticketRecompra - ticketPrimeira) / ticketPrimeira * 100);
+            if (diferenca > 0) {
+                trend = `↗️ +${diferenca.toFixed(1)}% vs primeira compra`;
+                colorClass = 'success';
+            } else if (diferenca < 0) {
+                trend = `↘️ ${diferenca.toFixed(1)}% vs primeira compra`;
+                colorClass = 'warning';
+            } else {
+                trend = `➡️ Igual à primeira compra`;
+                colorClass = 'info';
+            }
+        }
+        
+        updateMetricCard('card-ticket-recompra', {
+            value: `R$ ${ticketRecompra.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`,
+            trend: trend,
+            colorClass: colorClass
+        });
+        
+        console.log('✅ Cards de recorrência atualizados com sucesso');
+        
+        // Atualizar gráficos se Chart.js estiver disponível
+        if (typeof updateRecurrenceCharts === 'function' && data.charts) {
+            console.log('🔄 Tentando atualizar gráficos de recorrência...');
             updateRecurrenceCharts(data.charts);
         }
         
@@ -439,7 +514,17 @@ async function updateRecurrenceAnalysis() {
         
     } catch (error) {
         console.error('❌ Erro ao atualizar análise de recorrência:', error);
-        // Não mostrar erro para o usuário, pois é uma funcionalidade secundária
+        
+        // Mostrar erro nos cards
+        ['card-novos-clientes', 'card-recompras', 'card-taxa-conversao', 'card-ticket-recompra'].forEach(cardId => {
+            updateMetricCard(cardId, {
+                value: 'Erro',
+                trend: 'Falha ao carregar',
+                colorClass: 'danger'
+            });
+        });
+        
+        showAlert(`Não foi possível carregar dados de recorrência: ${error.message}`, 'warning');
     }
 }
 
@@ -537,3 +622,352 @@ $(document).ready(function() {
 
 console.log('✅ dashboard.js carregado e pronto');
 
+function toggleNPSAnalysis() {
+    console.log('🔄 Toggling NPS detailed analysis...');
+    
+    const analysisContainer = $('#nps-detailed-analysis');
+    const button = $('#show-nps-button');
+    
+    if (analysisContainer.length === 0) {
+        console.warn('⚠️ Container de análise NPS não encontrado');
+        return;
+    }
+    
+    const isVisible = analysisContainer.is(':visible');
+    
+    if (isVisible) {
+        // Ocultar análise
+        analysisContainer.slideUp(300);
+        button.find('button').html('<i class="fas fa-microscope me-2"></i>Ver Análise Completa do NPS');
+        console.log('✅ Análise NPS ocultada');
+    } else {
+        // Mostrar análise
+        analysisContainer.slideDown(300);
+        button.find('button').html('<i class="fas fa-eye-slash me-2"></i>Ocultar Análise do NPS');
+        console.log('✅ Análise NPS exibida');
+        
+        // Carregar dados detalhados do NPS
+        loadDetailedNPSData();
+    }
+}
+function loadDetailedNPSData() {
+    console.log('🔄 Carregando dados detalhados do NPS...');
+    
+    const npsData = window.currentDashboardData?.satisfaction?.nps;
+    if (!npsData || !npsData.details) {
+        console.warn('⚠️ Dados detalhados do NPS não disponíveis');
+        return;
+    }
+    
+    const details = npsData.details;
+    
+    // Atualizar elementos do NPS detalhado
+    $('#nps-promotores').text(details.promotores || 0);
+    $('#nps-neutros').text(details.neutros || 0);
+    $('#nps-detratores').text(details.detratores || 0);
+    $('#nps-total').text(details.total_validas || 0);
+    
+    // Atualizar interpretação
+    const npsValue = parseFloat(npsData.value) || 0;
+    let interpretation = '';
+    let alertClass = 'alert-info';
+    
+    if (npsValue >= 70) {
+        interpretation = 'Excelente! Seu NPS está na categoria "Classe Mundial". A maioria dos clientes são promotores ativos da sua marca.';
+        alertClass = 'alert-success';
+    } else if (npsValue >= 50) {
+        interpretation = 'Muito bom! Seu NPS está acima da média brasileira. Há uma base sólida de clientes satisfeitos.';
+        alertClass = 'alert-success';
+    } else if (npsValue >= 0) {
+        interpretation = 'Moderado. Há espaço significativo para melhoria na experiência do cliente.';
+        alertClass = 'alert-warning';
+    } else {
+        interpretation = 'Crítico. É urgente investigar e melhorar a experiência do cliente.';
+        alertClass = 'alert-danger';
+    }
+    
+    $('#nps-interpretation').removeClass('alert-info alert-success alert-warning alert-danger')
+                           .addClass(alertClass)
+                           .text(interpretation);
+    
+    console.log('✅ Dados detalhados do NPS carregados');
+}
+
+// === TORNAR FUNÇÕES GLOBAIS ===
+window.toggleNPSAnalysis = toggleNPSAnalysis;
+
+// === FUNÇÕES DA PÁGINA DE GESTÃO DE CLIENTES ===
+
+let allClients = [];
+let filteredClients = [];
+let currentPage = 1;
+let itemsPerPage = 10;
+
+async function loadClientsPage() {
+    console.log('🔄 Carregando página de Gestão de Clientes...');
+    showLoading();
+    try {
+        const response = await fetch('/api/clients-data');
+        if (!response.ok) throw new Error(`Erro na API de clientes: ${response.statusText}`);
+        
+        const data = await response.json();
+        if (data.status !== 'success') throw new Error(data.error || 'A API de clientes retornou um erro.');
+
+        allClients = data.clients;
+        filteredClients = allClients;
+        
+        populateFilters();
+
+        // INICIALIZA O SELECT2 NOS FILTROS
+        $('#filter-nivel, #filter-risco, #filter-status').select2({
+            theme: "bootstrap-5",
+            placeholder: 'Selecione',
+            closeOnSelect: false, // Mantém aberto para múltiplas seleções
+        });
+
+        setupClientEventListeners();
+        renderPage();
+        
+        console.log(`✅ ${allClients.length} clientes carregados com sucesso.`);
+
+    } catch (error) {
+        console.error("❌ Falha ao carregar dados dos clientes:", error);
+        $('#client-list-container').html('<div class="alert alert-danger">Não foi possível carregar os dados. Tente atualizar a página.</div>');
+    } finally {
+        hideLoading();
+    }
+}
+
+function setupClientEventListeners() {
+    $('#search-client, #filter-receita-min, #filter-receita-max').on('keyup', debounce(applyFilters, 400));
+    $('#filter-nivel, #filter-risco, #filter-status, #items-per-page').on('change', applyFilters);
+    $('#export-clients-btn').on('click', exportClientsToCSV);
+}
+
+function populateFilters() {
+    const niveis = [...new Set(allClients.map(c => c.nivel_cliente))].filter(Boolean).sort();
+    const riscos = [...new Set(allClients.map(c => c.risco_recencia))].filter(Boolean).sort();
+    const statuses = [...new Set(allClients.map(c => c.status_churn))].filter(Boolean).sort();
+
+    niveis.forEach(nivel => $('#filter-nivel').append(`<option value="${nivel}">${nivel}</option>`));
+    riscos.forEach(risco => $('#filter-risco').append(`<option value="${risco}">${risco}</option>`));
+    statuses.forEach(status => $('#filter-status').append(`<option value="${status}">${status}</option>`));
+}
+
+function applyFilters() {
+    const searchTerm = $('#search-client').val().toLowerCase();
+    const nivelFilter = $('#filter-nivel').val() || [];
+    const riscoFilter = $('#filter-risco').val() || []; // Mantido caso queira adicionar de volta
+    const statusFilter = $('#filter-status').val() || [];
+    const minReceita = parseFloat($('#filter-receita-min').val());
+    const maxReceita = parseFloat($('#filter-receita-max').val());
+    
+    itemsPerPage = parseInt($('#items-per-page').val());
+
+    filteredClients = allClients.filter(client => {
+        const searchMatch = !searchTerm || 
+                            client.nome.toLowerCase().includes(searchTerm) || 
+                            client.email.toLowerCase().includes(searchTerm);
+        
+        const nivelMatch = nivelFilter.length === 0 || nivelFilter.includes(client.nivel_cliente);
+        const riscoMatch = riscoFilter.length === 0 || riscoFilter.includes(client.risco_recencia);
+        const statusMatch = statusFilter.length === 0 || statusFilter.includes(client.status_churn);
+
+        // Lógica para o filtro de receita
+        const clientReceita = parseFloat(String(client.receita).replace(',', '.')) || 0;
+        const receitaMatch = (isNaN(minReceita) || clientReceita >= minReceita) &&
+                             (isNaN(maxReceita) || clientReceita <= maxReceita);
+
+        return searchMatch && nivelMatch && riscoMatch && statusMatch && receitaMatch;
+    });
+
+    currentPage = 1;
+    renderPage();
+}
+
+function renderPage() {
+    renderClientList();
+    renderPagination();
+}
+
+function renderClientList() {
+    const container = $('#client-list-container');
+    container.empty();
+
+    if (filteredClients.length === 0) {
+        container.html('<div class="text-center p-5"><i class="fas fa-search fa-2x text-muted"></i><p class="mt-3">Nenhum cliente encontrado com os filtros aplicados.</p></div>');
+        return;
+    }
+
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    const pageClients = filteredClients.slice(startIndex, endIndex);
+
+    pageClients.forEach(client => {
+        const cardHtml = createClientCard(client);
+        container.append(cardHtml);
+    });
+}
+
+function createClientCard(client) {
+    // Mapeamento de Nível para a classe CSS de cor
+    const nivelColorMap = {
+        'Premium': 'text-nivel-premium',
+        'Gold': 'text-nivel-gold',
+        'Silver': 'text-nivel-silver',
+        'Bronze': 'text-nivel-bronze'
+    };
+    const nomeColorClass = nivelColorMap[client.nivel_cliente] || '';
+
+    // Funções de formatação
+    const format = (value, prefix = '', suffix = '') => (value && String(value).trim() !== '') ? `${prefix}${value}${suffix}` : 'N/A';
+    const formatCurrency = (value) => {
+        const num = parseFloat(String(value).replace(',', '.'));
+        return !isNaN(num) ? `R$ ${num.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'N/A';
+    };
+    const formatDays = (value) => {
+        const num = parseFloat(String(value).replace(',', '.'));
+        return !isNaN(num) ? `${num.toFixed(1)} dias` : 'N/A';
+    };
+    const formatLocation = (cidade, estado) => {
+        const c = format(cidade);
+        const e = format(estado);
+        if (c !== 'N/A' && e !== 'N/A') return `${c}, ${e}`;
+        if (c !== 'N/A') return c;
+        if (e !== 'N/A') return e;
+        return 'N/A';
+    };
+
+    return `
+    <div class="card client-card mb-3">
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <h5 class="card-title mb-0 ${nomeColorClass}">${format(client.nome)}</h5>
+                    <small class="text-muted">${format(client.email)}</small>
+                    <div class="mt-2" style="font-size: 0.85rem;">
+                        <span class="me-3"><i class="fas fa-phone-alt me-1 text-muted"></i> ${format(client.telefone1)}</span>
+                        <span class="me-3"><i class="fas fa-id-card me-1 text-muted"></i> ${format(client.cpfcnpj)}</span>
+                        <span><i class="fas fa-map-marker-alt me-1 text-muted"></i> ${formatLocation(client.cidade, client.estado)}</span>
+                    </div>
+                </div>
+                <div class="text-end">
+                    <span class="fw-bold fs-4">${format(client.score_final)}</span>
+                    <div class="text-muted" style="font-size: 0.8rem;">Score Final</div>
+                </div>
+            </div>
+            <hr>
+            <div class="client-info-grid">
+                <div class="client-info-item"><i class="fas fa-user-tie"></i> <strong>Vendedor:</strong> ${format(client.codigo_vendedor)}</div>
+                <div class="client-info-item"><i class="fas fa-trophy"></i> <strong>Nível:</strong> ${format(client.nivel_cliente)}</div>
+                <div class="client-info-item"><i class="fas fa-exclamation-triangle"></i> <strong>Risco:</strong> ${format(client.risco_recencia)}</div>
+                <div class="client-info-item"><i class="fas fa-heartbeat"></i> <strong>Status:</strong> ${format(client.status_churn)}</div>
+                <div class="client-info-item"><i class="fas fa-redo-alt"></i> <strong>Frequência:</strong> ${format(client.frequency, '', ' pedidos')}</div>
+                <div class="client-info-item"><i class="fas fa-history"></i> <strong>Intervalo Médio:</strong> ${formatDays(client.ipt_cliente)}</div>
+                <div class="client-info-item"><i class="fas fa-dollar-sign"></i> <strong>Receita:</strong> ${formatCurrency(client.receita)}</div>
+                <div class="client-info-item"><i class="fas fa-calendar-check"></i> <strong>Últ. Compra:</strong> ${format(client.recency_days, '', ' dias')}</div>
+            </div>
+        </div>
+    </div>`;
+}
+
+// NOVA FUNÇÃO: Exportar clientes para CSV
+function exportClientsToCSV() {
+    if (filteredClients.length === 0) {
+        alert("Não há clientes para exportar com os filtros atuais.");
+        return;
+    }
+
+    const headers = [
+        "Nome", "Email", "Telefone", "CNPJ/CPF", "Cidade", "Estado", 
+        "Vendedor", "Nível Cliente", "Risco Recência", "Status Churn",
+        "Score Final", "Priority Score", "Frequência", "Intervalo Médio", 
+        "Receita", "Última Compra (dias)"
+    ];
+
+    // Mapeia os dados do cliente para a ordem dos cabeçalhos, garantindo que tudo seja string
+    const rows = filteredClients.map(client => [
+        `"${String(client.nome || '').replace(/"/g, '""')}"`,
+        `"${String(client.email || '').replace(/"/g, '""')}"`,
+        `"${String(client.telefone1 || '').replace(/"/g, '""')}"`,
+        `"${String(client.cpfcnpj || '').replace(/"/g, '""')}"`,
+        `"${String(client.cidade || '').replace(/"/g, '""')}"`,
+        `"${String(client.estado || '').replace(/"/g, '""')}"`,
+        `"${String(client.codigo_vendedor || '').replace(/"/g, '""')}"`,
+        `"${String(client.nivel_cliente || '').replace(/"/g, '""')}"`,
+        `"${String(client.risco_recencia || '').replace(/"/g, '""')}"`,
+        `"${String(client.status_churn || '').replace(/"/g, '""')}"`,
+        `"${String(client.score_final || '').replace(/"/g, '""')}"`,
+        `"${String(client.priority_score || '').replace(/"/g, '""')}"`,
+        `"${String(client.frequency || '').replace(/"/g, '""')}"`,
+        `"${String(client.ipt_cliente || '').replace(/"/g, '""')}"`,
+        `"${String(client.receita || '').replace(/"/g, '""')}"`,
+        `"${String(client.recency_days || '').replace(/"/g, '""')}"`
+    ].join(';')); // Use ponto e vírgula como separador para CSV no Brasil
+
+    const csvContent = "data:text/csv;charset=utf-8,\uFEFF" + [headers.join(';'), ...rows].join('\n');
+    
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", "clientes_papello_filtrados.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+}
+
+function renderPagination() {
+    const totalPages = Math.ceil(filteredClients.length / itemsPerPage);
+    const infoContainer = $('#pagination-info');
+    const controlsContainer = $('#pagination-controls, #pagination-controls-bottom');
+    
+    infoContainer.text(`Mostrando ${Math.min(itemsPerPage * (currentPage - 1) + 1, filteredClients.length)} a ${Math.min(currentPage * itemsPerPage, filteredClients.length)} de ${filteredClients.length} clientes`);
+    
+    controlsContainer.empty();
+    if (totalPages <= 1) return;
+
+    let paginationHtml = '<ul class="pagination">';
+    
+    // Botão Anterior
+    paginationHtml += `<li class="page-item ${currentPage === 1 ? 'disabled' : ''}"><a class="page-link" href="#" data-page="${currentPage - 1}">Anterior</a></li>`;
+
+    // Lógica para exibir páginas
+    let startPage = Math.max(1, currentPage - 2);
+    let endPage = Math.min(totalPages, currentPage + 2);
+
+    if (currentPage <= 3) endPage = Math.min(5, totalPages);
+    if (currentPage > totalPages - 3) startPage = Math.max(1, totalPages - 4);
+
+    if (startPage > 1) paginationHtml += '<li class="page-item disabled"><span class="page-link">...</span></li>';
+
+    for (let i = startPage; i <= endPage; i++) {
+        paginationHtml += `<li class="page-item ${i === currentPage ? 'active' : ''}"><a class="page-link" href="#" data-page="${i}">${i}</a></li>`;
+    }
+
+    if (endPage < totalPages) paginationHtml += '<li class="page-item disabled"><span class="page-link">...</span></li>';
+
+    // Botão Próximo
+    paginationHtml += `<li class="page-item ${currentPage === totalPages ? 'disabled' : ''}"><a class="page-link" href="#" data-page="${currentPage + 1}">Próximo</a></li>`;
+    paginationHtml += '</ul>';
+    
+    controlsContainer.html(paginationHtml);
+
+    // Adiciona evento de clique aos links da paginação
+    controlsContainer.find('a.page-link').on('click', function(e) {
+        e.preventDefault();
+        const page = $(this).data('page');
+        if (page) {
+            currentPage = parseInt(page);
+            renderPage();
+            $('html, body').animate({ scrollTop: 0 }, 'fast'); // Rola para o topo
+        }
+    });
+}
+
+function debounce(func, delay) {
+    let timeout;
+    return function(...args) {
+        clearTimeout(timeout);
+        timeout = setTimeout(() => func.apply(this, args), delay);
+    };
+}
